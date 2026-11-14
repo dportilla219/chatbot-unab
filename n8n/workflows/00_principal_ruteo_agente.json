@@ -1,0 +1,922 @@
+{
+  "id": "unabChatPrincip1",
+  "name": "UNAB Chatbot - 00 Principal (Ruteo + Agente MCP)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Chatbot académico UNAB\n**Entrada:** app Gradio → POST /webhook/chat-unab\n1. Guardrails de entrada (reglas + LLM)\n2. Ruteo por intención (Text Classifier)\n3. Contexto por workflow (01 RAG · 02 Calendario · 03 Historial · 04 Noticias)\n4. Agente Claude + memoria persistente (Postgres) + herramientas MCP\n5. Guardrail de salida + log",
+        "height": 240,
+        "width": 440,
+        "color": 5
+      },
+      "id": "1d9004ae-f983-476c-822a-7c03d1723aba",
+      "name": "Nota 0",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -680,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat-unab",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "3d77eea6-8497-4397-bcda-10ec82ad54f1",
+      "name": "Webhook chat",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -600,
+        120
+      ],
+      "webhookId": "6331634d-c4ab-4345-be89-bbc73a9b4b23"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Guardrail determinístico de entrada\nconst b = $input.first().json.body ?? $input.first().json;\nconst id = String(b.id_estudiante || '').trim().toUpperCase();\nlet mensaje = String(b.mensaje || '').replace(/\\s+/g, ' ').trim().slice(0, 1200);\nconst motivos = [];\nif (!/^U\\d{8}$/.test(id)) motivos.push('Sesión inválida: falta un ID estudiantil válido.');\nif (!mensaje) motivos.push('Mensaje vacío.');\nconst otros = (mensaje.match(/U\\d{8}/gi) || []).map(x => x.toUpperCase()).filter(x => x !== id);\nif (otros.length) motivos.push('Solo puedo consultar la información del estudiante que inició sesión.');\nif (/(ignora|olvida|ignore).{0,30}(instrucciones|reglas|instructions)|system prompt|act[uú]a como|modo desarrollador|DAN\\b/i.test(mensaje))\n  motivos.push('La solicitud intenta modificar las reglas del asistente.');\nif (/\\b(?:\\d[ -]*?){13,16}\\b/.test(mensaje)) motivos.push('No compartas números de tarjeta ni datos financieros en el chat.');\nif (/(contrase[nñ]a|password|clave).{0,20}(de|del)?.{0,20}(portal|cosmos|banner|correo)/i.test(mensaje))\n  motivos.push('Nunca compartas tus contraseñas institucionales.');\nreturn [{ json: {\n  sessionId: String(b.sessionId || id), id_estudiante: id, nombre: String(b.nombre || ''),\n  programa: String(b.programa || 'Ingeniería de Sistemas'), mensaje,\n  bloqueado: motivos.length > 0, motivo: motivos.join(' '),\n  fecha_hoy: $now.setZone('America/Bogota').toFormat('yyyy-MM-dd')\n}}];\n"
+      },
+      "id": "40e54d69-fd15-4103-bdc1-0f3c9fe49f8d",
+      "name": "Normalizar entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6a098deb-2a77-4d92-be0a-3873806c7168",
+              "leftValue": "={{ $json.bloqueado }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "53c6f0e9-2bf8-4d18-9a5b-d79924dcd780",
+      "name": "¿Bloqueado por reglas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -160,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "classify",
+        "text": "={{ $json.mensaje }}",
+        "guardrails": {
+          "jailbreak": {
+            "value": {
+              "threshold": 0.7
+            }
+          },
+          "nsfw": {
+            "value": {
+              "threshold": 0.8
+            }
+          },
+          "pii": {
+            "value": {
+              "type": "selected",
+              "entities": [
+                "CREDIT_CARD",
+                "IBAN_CODE",
+                "CRYPTO"
+              ]
+            }
+          }
+        }
+      },
+      "id": "87c495a5-9044-4ea8-bddd-f7aabdca9623",
+      "name": "Guardrails (Jailbreak/NSFW/PII)",
+      "type": "@n8n/n8n-nodes-langchain.guardrails",
+      "typeVersion": 2,
+      "position": [
+        80,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-haiku-5-5"
+        },
+        "options": {
+          "temperature": 0,
+          "maxTokensToSample": 1500
+        }
+      },
+      "id": "fe211133-60c0-4bd8-aa59-439e425c4ff5",
+      "name": "Claude rápido (guardrails)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        80,
+        440
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "anthropicUnab01",
+          "name": "Anthropic Claude"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst e = $('Normalizar entrada').first().json;\nconst motivo = e.motivo || 'La consulta fue bloqueada por el módulo de seguridad (guardrails).';\nreturn [{ json: { respuesta: `🛡️ ${motivo}\\n\\nPuedo ayudarte con tu matrícula, avance académico, plan de estudios, competencias digitales, calendario, reglamento estudiantil y noticias de la UNAB.`,\n  intencion: 'bloqueado', bloqueado: true, motivo } }];\n"
+      },
+      "id": "54c0d9a0-ccff-4e53-9661-de10e09c3d96",
+      "name": "Respuesta bloqueada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        -760
+      ]
+    },
+    {
+      "parameters": {
+        "inputText": "={{ $('Normalizar entrada').item.json.mensaje }}",
+        "categories": {
+          "categories": [
+            {
+              "category": "consulta_general",
+              "description": "Preguntas sobre normas, Reglamento Estudiantil, plan de estudios en general, qué es la insignia o las competencias digitales, homologaciones, grados, requisitos, procedimientos de la UNAB."
+            },
+            {
+              "category": "calendario",
+              "description": "Fechas: inscripciones, pruebas diagnósticas, inicio o fin de clases, pagos de matrícula, cursos vacacionales, cancelaciones, grados."
+            },
+            {
+              "category": "historial_personal",
+              "description": "Preguntas sobre SU propia situación: estado de matrícula, notas, avance, cursos que ha tomado o le faltan, qué debe tomar, proyección de semestres, cursos de competencias digitales que ha tomado, recomendaciones personalizadas."
+            },
+            {
+              "category": "noticias",
+              "description": "Novedades, noticias, nuevos cursos, convocatorias, certificaciones o eventos recientes de la UNAB."
+            },
+            {
+              "category": "fuera_de_alcance",
+              "description": "Temas no relacionados con la vida académica de la UNAB (deportes, recetas, tareas de otras materias, chistes, etc.)."
+            }
+          ]
+        },
+        "options": {
+          "fallback": "other",
+          "systemPromptTemplate": "Eres el enrutador del asistente académico de la UNAB. Clasifica el mensaje del estudiante en una de estas categorías: {categories}. Usa el formato indicado. No expliques, solo devuelve el JSON."
+        }
+      },
+      "id": "05a43382-ebc0-4ca7-9ea2-52ced2049f58",
+      "name": "Ruteo por intención",
+      "type": "@n8n/n8n-nodes-langchain.textClassifier",
+      "typeVersion": 1.1,
+      "position": [
+        380,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-haiku-5-5"
+        },
+        "options": {
+          "temperature": 0,
+          "maxTokensToSample": 1500
+        }
+      },
+      "id": "ca881d1d-bfe3-40b1-ba61-21d8e76db2dd",
+      "name": "Claude rápido (clasificador)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        380,
+        440
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "anthropicUnab01",
+          "name": "Anthropic Claude"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "### 01 Consulta general\nPregunta → búsqueda RAG (pgvector) → LLM → respuesta",
+        "height": 95,
+        "width": 460,
+        "color": 6
+      },
+      "id": "3843cebf-5b7a-403b-a0ce-e812949e8ae0",
+      "name": "Nota 9",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        660,
+        -535
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp:9000/rag/search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $('Normalizar entrada').item.json.mensaje, k: 6 }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c8060248-6e5d-4f4b-bcf5-4c5b59ec152b",
+      "name": "01 Búsqueda RAG (pgvector)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        -420
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst r = $input.first().json.resultados || [];\nconst ctx = r.map((d, i) => `[${i+1}] (${d.fuente} | ${d.seccion || d.titulo} | similitud ${d.similitud})\\n${d.contenido}`).join('\\n\\n');\nreturn [{ json: { intencion: 'consulta_general', contexto: ctx || 'Sin resultados en la base documental.',\n  instruccion: 'Responde usando SOLO los fragmentos recuperados (RAG). Cita el artículo o la fuente entre paréntesis. Si no está en los fragmentos, dilo y sugiere a quién acudir.' } }];\n"
+      },
+      "id": "ae1d4b73-0f68-4490-8700-c5b1042d27ac",
+      "name": "01 Contexto RAG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -420
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 02 Consulta de calendario\nPregunta → intención → Google Sheets → respuesta",
+        "height": 95,
+        "width": 460,
+        "color": 6
+      },
+      "id": "9825a06a-3a4d-4f18-bc92-e60b221b5b7a",
+      "name": "Nota 12",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        660,
+        -255
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.CALENDARIO_CSV_URL }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "5479d23c-afde-4946-9c4c-9bcde904f032",
+      "name": "02 Leer Google Sheet (calendario)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        -140
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst csv = String($input.first().json.data || '');\nconst hoy = $('Normalizar entrada').first().json.fecha_hoy;\nfunction parse(line){ const out=[]; let cur='', q=false; for (const ch of line){ if(ch=='\"'){q=!q;continue;} if(ch==','&&!q){out.push(cur);cur='';} else cur+=ch;} out.push(cur); return out; }\nconst lines = csv.split(/\\r?\\n/).filter(l => l.trim());\nlet filas = [];\nif (lines.length > 1) {\n  const h = parse(lines[0]).map(x => x.trim());\n  filas = lines.slice(1).map(l => Object.fromEntries(parse(l).map((v, i) => [h[i], v.trim()])));\n}\nconst proximas = filas.filter(f => (f.fecha_fin || f.fecha_inicio) >= hoy).sort((a,b) => a.fecha_inicio.localeCompare(b.fecha_inicio));\nconst ctx = proximas.map(f => `- ${f.actividad} | ${f.categoria} | ${f.fecha_inicio}${f.fecha_fin && f.fecha_fin!==f.fecha_inicio ? ' a '+f.fecha_fin : ''} | Dirigido a: ${f.dirigido_a} | Fuente: ${f.fuente}`).join('\\n');\nreturn [{ json: { intencion: 'calendario',\n  contexto: ctx ? `Hoy es ${hoy}. Actividades vigentes o próximas del calendario académico (Google Sheets):\\n${ctx}` : 'No se pudo leer el Google Sheet; usa la herramienta calendario_academico del MCP.',\n  instruccion: 'Responde con las fechas exactas relevantes a la pregunta, en orden cronológico. Indica si la fecha es sintética o tomada de una publicación de unab.edu.co según la columna Fuente.' } }];\n"
+      },
+      "id": "2d6e5437-f6a5-4463-a68f-dd45c53323dc",
+      "name": "02 Contexto calendario",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 03 Cursos realizados / historial\nPregunta → base de datos de estudiantes → respuesta personalizada",
+        "height": 95,
+        "width": 460,
+        "color": 6
+      },
+      "id": "465c8344-5db4-46f0-bc56-221502fa42f7",
+      "name": "Nota 15",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        660,
+        25
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT row_to_json(r) AS resumen,\n       (SELECT row_to_json(p) FROM academico.v_proyeccion_grado p WHERE p.id_estudiante = $1) AS proyeccion,\n       (SELECT json_agg(c ORDER BY c.ruta) FROM academico.v_ccd_estado c WHERE c.id_estudiante = $1) AS competencias_digitales,\n       (SELECT json_agg(json_build_object('asignatura', a.nombre, 'creditos', a.creditos))\n          FROM academico.historial_academico h JOIN academico.asignatura a USING (cod_asignatura)\n         WHERE h.id_estudiante = $1 AND h.estado = 'EN_CURSO') AS cursos_en_curso,\n       (SELECT row_to_json(m) FROM academico.v_matricula_actual m WHERE m.id_estudiante = $1) AS matricula_actual\nFROM academico.v_resumen_estudiante r WHERE r.id_estudiante = $1;",
+        "options": {
+          "queryReplacement": "={{ $('Normalizar entrada').item.json.id_estudiante }}"
+        }
+      },
+      "id": "45431eab-04b5-4314-a719-c591f6cc5720",
+      "name": "03 Consultar BD estudiante",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        700,
+        140
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "supabaseUnab01",
+          "name": "Supabase UNAB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst d = $input.first().json;\nreturn [{ json: { intencion: 'historial_personal', contexto: JSON.stringify(d, null, 1).slice(0, 9000),\n  instruccion: 'Responde de forma personalizada con los datos del estudiante. Para cursos realizados, notas por periodo, asignaturas pendientes o propuesta del próximo semestre usa las herramientas MCP (historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales). Da recomendaciones concretas para el éxito académico.' } }];\n"
+      },
+      "id": "a710db81-d0b8-4916-9595-5a80711e778f",
+      "name": "03 Contexto historial",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 04 Noticias y nuevos cursos\nScraping (workflow 04) → BD → respuesta del chatbot",
+        "height": 95,
+        "width": 460,
+        "color": 6
+      },
+      "id": "49a3897c-5a02-4834-81a9-03915c1dd6dd",
+      "name": "Nota 18",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        660,
+        305
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT titulo, to_char(fecha_pub,'YYYY-MM-DD') AS fecha, etiqueta, left(coalesce(contenido,resumen), 700) AS texto, url\nFROM academico.noticia ORDER BY fecha_pub DESC NULLS LAST LIMIT 8;",
+        "options": {}
+      },
+      "id": "22d2efad-5b43-4393-812e-68935682a0f0",
+      "name": "04 Consultar noticias",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        700,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "supabaseUnab01",
+          "name": "Supabase UNAB"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst n = $input.all().map(i => i.json).filter(x => x.titulo);\nconst ctx = n.map(x => `- [${x.fecha}] (${x.etiqueta}) ${x.titulo}\\n  ${x.texto}\\n  Enlace: ${x.url}`).join('\\n');\nreturn [{ json: { intencion: 'noticias', contexto: ctx || 'Aún no hay noticias cargadas: ejecuta el workflow 04 (scraper).',\n  instruccion: 'Resume las noticias más relevantes para la pregunta (nuevos cursos, convocatorias, certificaciones). Incluye fecha y enlace.' } }];\n"
+      },
+      "id": "fd3260f1-29ea-4c18-84aa-7cae2ae67e06",
+      "name": "04 Contexto noticias",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nreturn [{ json: { respuesta: 'Soy el asistente académico de la UNAB 🎓 y solo puedo ayudarte con temas de tu vida académica: matrícula, avance del plan de estudios, proyección de semestres, competencias digitales e insignia, calendario académico, Reglamento Estudiantil y noticias de la universidad. ¿Te ayudo con alguno?', intencion: 'fuera_de_alcance', bloqueado: false } }];\n"
+      },
+      "id": "e5e03af7-1b9e-46ed-b9ca-ef21ae10a68a",
+      "name": "Fuera de alcance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Estudiante: {{ $('Normalizar entrada').item.json.nombre }} ({{ $('Normalizar entrada').item.json.id_estudiante }}) - {{ $('Normalizar entrada').item.json.programa }}\nIntención detectada: {{ $json.intencion }}\n\nInstrucción para esta ruta: {{ $json.instruccion }}\n\nContexto recuperado:\n{{ $json.contexto }}\n\nPregunta del estudiante: {{ $('Normalizar entrada').item.json.mensaje }}",
+        "options": {
+          "systemMessage": "=Eres el Asistente Académico de la Universidad Autónoma de Bucaramanga (UNAB) para estudiantes de Ingeniería de Sistemas.\nObjetivo: apoyar al estudiante en su matrícula, estado académico actual y proyección, con requisitos y recomendaciones para tener éxito (investigación, autoaprendizaje y educación de precisión).\n\nReglas:\n- Responde SIEMPRE en español, tono cercano y profesional, con viñetas cortas y en negrita los datos clave.\n- Solo puedes consultar datos del estudiante autenticado (id {{ $('Normalizar entrada').item.json.id_estudiante }}). Nunca uses otro ID en las herramientas.\n- Basa las normas en el Reglamento Estudiantil de Pregrado UNAB (2019) y cita el artículo. Si no tienes la información, dilo y remite a: Punto U (agentedeservicios@unab.edu.co, WhatsApp 322 905 7020), CCD (ccdigital@unab.edu.co) o el director de programa.\n- No inventes notas, fechas ni normas. Los datos de estudiantes son sintéticos (simulan Banner/COSMOS).\n- Cuando sea útil, cierra con 1-3 recomendaciones accionables (asesoría académica, Bienestar, rutas de competencias digitales, inglés B2, carga de créditos).\n- Herramientas MCP disponibles: estado_academico, historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales, plan_de_estudios, buscar_reglamento_y_documentos, calendario_academico, noticias_recientes.\nFecha de hoy: {{ $('Normalizar entrada').item.json.fecha_hoy }}.",
+          "maxIterations": 8
+        }
+      },
+      "id": "a836e0cc-1152-457e-ba0a-4d3d3cbf871a",
+      "name": "Asistente UNAB (Agente)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        1300,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-sonnet-5-5"
+        },
+        "options": {
+          "temperature": 0.3,
+          "maxTokensToSample": 1500
+        }
+      },
+      "id": "8818674a-b0a8-4e08-a04e-5230810d81a9",
+      "name": "Claude (agente)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        1200,
+        420
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "anthropicUnab01",
+          "name": "Anthropic Claude"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Normalizar entrada').item.json.sessionId }}",
+        "tableName": "n8n_chat_histories",
+        "contextWindowLength": 10
+      },
+      "id": "76053b0e-457a-4a9c-9a31-a371cbdb439d",
+      "name": "Memoria persistente (Postgres)",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        1360,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "supabaseUnab01",
+          "name": "Supabase UNAB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://mcp:9000/mcp",
+        "serverTransport": "httpStreamable",
+        "include": "all",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "93dd0b62-ccc1-42e1-9957-a659ab9eec5a",
+      "name": "Servidor MCP (FastMCP)",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.2,
+      "position": [
+        1520,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst e = $('Normalizar entrada').first().json;\nlet intencion = 'desconocida';\nfor (const n of ['01 Contexto RAG','02 Contexto calendario','03 Contexto historial','04 Contexto noticias']) {\n  try { if ($(n).isExecuted) intencion = $(n).first().json.intencion; } catch (err) {}\n}\nlet txt = String($input.first().json.output ?? $input.first().json.text ?? '').trim();\n// No filtrar datos de otros estudiantes\ntxt = txt.replace(/U\\d{8}/g, m => m.toUpperCase() === e.id_estudiante ? m : '[ID oculto]');\n// No exponer cadenas de conexión ni claves\ntxt = txt.replace(/postgres(ql)?:\\/\\/\\S+/gi, '[oculto]').replace(/sk-ant-[\\w-]+/g, '[oculto]');\nif (!txt) txt = 'No pude generar una respuesta en este momento. Intenta reformular tu pregunta.';\nreturn [{ json: { respuesta: txt.slice(0, 6000), intencion, bloqueado: false } }];\n"
+      },
+      "id": "10db0702-a1c4-442d-8241-ddf427f4879d",
+      "name": "Guardrail de salida",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO academico.chat_log (session_id, id_estudiante, intencion, pregunta, respuesta, bloqueado, motivo)\nVALUES ($1, $2, $3, $4, $5, $6, $7);",
+        "options": {
+          "queryReplacement": "={{ [ $('Normalizar entrada').first().json.sessionId, $('Normalizar entrada').first().json.id_estudiante, $json.intencion, $('Normalizar entrada').first().json.mensaje, $json.respuesta, $json.bloqueado, $json.motivo || null ] }}"
+        }
+      },
+      "id": "0e47c502-0ffc-416e-93c4-863535fa04d3",
+      "name": "Registrar conversación",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2100,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "supabaseUnab01",
+          "name": "Supabase UNAB"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ respuesta: $('Respuesta final').first().json.respuesta, intencion: $('Respuesta final').first().json.intencion }) }}",
+        "options": {}
+      },
+      "id": "efa86e35-56ba-47c4-91ea-8738491cc048",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2340,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $input.first().json }];"
+      },
+      "id": "434844f9-7be7-43d0-832a-d875fe13a9e6",
+      "name": "Respuesta final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1870,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook chat": {
+      "main": [
+        [
+          {
+            "node": "Normalizar entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar entrada": {
+      "main": [
+        [
+          {
+            "node": "¿Bloqueado por reglas?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Bloqueado por reglas?": {
+      "main": [
+        [
+          {
+            "node": "Respuesta bloqueada",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Guardrails (Jailbreak/NSFW/PII)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude rápido (guardrails)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Guardrails (Jailbreak/NSFW/PII)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardrails (Jailbreak/NSFW/PII)": {
+      "main": [
+        [
+          {
+            "node": "Ruteo por intención",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta bloqueada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude rápido (clasificador)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Ruteo por intención",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ruteo por intención": {
+      "main": [
+        [
+          {
+            "node": "01 Búsqueda RAG (pgvector)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "02 Leer Google Sheet (calendario)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "03 Consultar BD estudiante",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "04 Consultar noticias",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fuera de alcance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "01 Búsqueda RAG (pgvector)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "01 Búsqueda RAG (pgvector)": {
+      "main": [
+        [
+          {
+            "node": "01 Contexto RAG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02 Leer Google Sheet (calendario)": {
+      "main": [
+        [
+          {
+            "node": "02 Contexto calendario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03 Consultar BD estudiante": {
+      "main": [
+        [
+          {
+            "node": "03 Contexto historial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04 Consultar noticias": {
+      "main": [
+        [
+          {
+            "node": "04 Contexto noticias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "01 Contexto RAG": {
+      "main": [
+        [
+          {
+            "node": "Asistente UNAB (Agente)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02 Contexto calendario": {
+      "main": [
+        [
+          {
+            "node": "Asistente UNAB (Agente)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03 Contexto historial": {
+      "main": [
+        [
+          {
+            "node": "Asistente UNAB (Agente)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04 Contexto noticias": {
+      "main": [
+        [
+          {
+            "node": "Asistente UNAB (Agente)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude (agente)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Asistente UNAB (Agente)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria persistente (Postgres)": {
+      "ai_memory": [
+        [
+          {
+            "node": "Asistente UNAB (Agente)",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Servidor MCP (FastMCP)": {
+      "ai_tool": [
+        [
+          {
+            "node": "Asistente UNAB (Agente)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asistente UNAB (Agente)": {
+      "main": [
+        [
+          {
+            "node": "Guardrail de salida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardrail de salida": {
+      "main": [
+        [
+          {
+            "node": "Respuesta final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta bloqueada": {
+      "main": [
+        [
+          {
+            "node": "Respuesta final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fuera de alcance": {
+      "main": [
+        [
+          {
+            "node": "Respuesta final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta final": {
+      "main": [
+        [
+          {
+            "node": "Registrar conversación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar conversación": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bogota"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

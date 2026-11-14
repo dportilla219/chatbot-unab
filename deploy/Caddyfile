@@ -1,0 +1,12 @@
+# Certificados TLS automáticos (Let's Encrypt) usando sslip.io: <IP-con-guiones>.sslip.io
+n8n.{$DOMINIO_BASE} {
+	reverse_proxy n8n:5678
+}
+
+app.{$DOMINIO_BASE} {
+	reverse_proxy app:7860
+}
+
+mcp.{$DOMINIO_BASE} {
+	reverse_proxy mcp:9000
+}

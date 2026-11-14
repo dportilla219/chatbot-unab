@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.pyc
+docs/fuentes/*.pdf
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties

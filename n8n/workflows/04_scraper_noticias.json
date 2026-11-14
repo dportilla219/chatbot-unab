@@ -1,0 +1,336 @@
+{
+  "id": "unabScraperNews1",
+  "name": "UNAB Chatbot - 04 Scraper de noticias (programado)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Scraper periódico de noticias UNAB\nCada 6 h consulta la API pública de WordPress de unab.edu.co (Estudiantes, Ing. Sistemas, Facultad de Ingeniería) → limpia y etiqueta (CURSOS/CONVOCATORIA/CERTIFICACION/CCD) → upsert en academico.noticia → embeddings para RAG",
+        "height": 170,
+        "width": 560,
+        "color": 5
+      },
+      "id": "6e8838e5-18f4-4308-8165-8697f102b172",
+      "name": "Nota 0",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        -280
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "beb3192d-8af1-4845-8959-6b4198383323",
+      "name": "Cada 6 horas",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        -40
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "7fe39948-e6e8-4464-886f-8e6d868d9328",
+      "name": "Ejecutar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nreturn [232, 556, 134].map(c => ({ json: { categoria: c } }));\n"
+      },
+      "id": "09aaadf0-dc32-4e6d-baec-b0be282c2553",
+      "name": "Categorías a consultar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://unab.edu.co/wp-json/wp/v2/posts",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "categories",
+              "value": "={{ $json.categoria }}"
+            },
+            {
+              "name": "per_page",
+              "value": "10"
+            },
+            {
+              "name": "_fields",
+              "value": "id,date,link,title,excerpt,content,categories"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "ChatbotAcademicoUNAB/1.0 (proyecto academico)"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "70dc5353-c92d-43d0-b3b4-8cef6b44695b",
+      "name": "GET unab.edu.co wp-json",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        40
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst limpiar = h => String(h || '').replace(/<\\/(p|li|h\\d|tr)>/gi, '\\n').replace(/<br\\s*\\/?>/gi, '\\n').replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#8217;|&#8216;/g, \"'\").replace(/&#8220;|&#8221;|&quot;/g, '\"').replace(/&#8211;/g, '–')\n  .replace(/&#\\d+;/g, ' ').replace(/[ \\t]+/g, ' ').replace(/\\n\\s*\\n+/g, '\\n\\n').trim();\nconst reglas = [['CCD', /competencias digitales|\\bccd\\b|insignia|interacci[oó]n digital/i], ['CERTIFICACION', /certificaci[oó]n|certificado|examen|celpe|toefl|ielts|prueba de/i],\n  ['CONVOCATORIA', /convocatoria|inscripci|elecciones|beca|postula|abiertas/i], ['CURSOS', /curso|diplomado|taller|vacacional|intensivo|capacitaci/i]];\nconst vistos = new Set(); const out = [];\nfor (const it of $input.all()) {\n  const p = it.json; if (!p || !p.id || vistos.has(p.id)) continue; vistos.add(p.id);\n  const titulo = limpiar(p.title?.rendered), contenido = limpiar(p.content?.rendered);\n  const base = (titulo + ' ' + contenido.slice(0, 600));\n  const etiqueta = (reglas.find(([, rx]) => rx.test(base)) || ['GENERAL'])[0];\n  out.push({ json: { id_wp: p.id, titulo, url: p.link, fecha_pub: p.date, resumen: limpiar(p.excerpt?.rendered).slice(0, 500),\n    contenido, categorias: (p.categories || []).join(','), etiqueta } });\n}\nreturn out;\n"
+      },
+      "id": "4e9dade5-266f-4547-a851-b0aa7625a0d8",
+      "name": "Limpiar y etiquetar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO academico.noticia (id_wp, titulo, url, fecha_pub, resumen, contenido, categorias, etiqueta, scraped_at)\nVALUES ($1, $2, $3, $4::timestamp, $5, $6, $7, $8, now())\nON CONFLICT (id_wp) DO UPDATE SET titulo = EXCLUDED.titulo, resumen = EXCLUDED.resumen, contenido = EXCLUDED.contenido,\n  etiqueta = EXCLUDED.etiqueta, scraped_at = now()\nRETURNING id_wp, titulo, etiqueta, (xmax = 0) AS es_nueva, contenido, url, fecha_pub;",
+        "options": {
+          "queryReplacement": "={{ [ $json.id_wp, $json.titulo, $json.url, $json.fecha_pub, $json.resumen, $json.contenido, $json.categorias, $json.etiqueta ] }}"
+        }
+      },
+      "id": "bf0d748b-2536-4e72-9530-ef265608debc",
+      "name": "Upsert noticia",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        640,
+        40
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "supabaseUnab01",
+          "name": "Supabase UNAB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "09059c89-f5ef-4f4c-9c5c-d5cc2c91d5d6",
+              "leftValue": "={{ $json.es_nueva }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "866dea01-7bd5-493b-b5d3-c5b341ac42e5",
+      "name": "¿Es nueva?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        860,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp:9000/embed",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ texts: [ '[Noticia UNAB ' + String($json.fecha_pub).slice(0,10) + ' - ' + $json.titulo + '] ' + String($json.contenido).slice(0, 1500) ] }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "632439ef-4850-44a6-9ed9-5158c9dbcb78",
+      "name": "Embeddings noticia",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO academico.documento_chunk (fuente, titulo, seccion, chunk_index, contenido, metadata, embedding)\nVALUES ('noticia', $1, $2, 0, $3, jsonb_build_object('url', $4::text), $5::vector)\nON CONFLICT (fuente, titulo, chunk_index) DO UPDATE SET contenido = EXCLUDED.contenido, embedding = EXCLUDED.embedding;",
+        "options": {
+          "queryReplacement": "={{ [ $('¿Es nueva?').item.json.titulo, $('¿Es nueva?').item.json.etiqueta, '[Noticia UNAB ' + String($('¿Es nueva?').item.json.fecha_pub).slice(0,10) + ' - ' + $('¿Es nueva?').item.json.titulo + '] ' + String($('¿Es nueva?').item.json.contenido).slice(0,1500), $('¿Es nueva?').item.json.url, $json.pgvector[0] ] }}"
+        }
+      },
+      "id": "51ea4675-dcd8-49ee-8ab1-320eb9b0e074",
+      "name": "Guardar noticia en PGVector",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1300,
+        40
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "supabaseUnab01",
+          "name": "Supabase UNAB"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada 6 horas": {
+      "main": [
+        [
+          {
+            "node": "Categorías a consultar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ejecutar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Categorías a consultar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorías a consultar": {
+      "main": [
+        [
+          {
+            "node": "GET unab.edu.co wp-json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET unab.edu.co wp-json": {
+      "main": [
+        [
+          {
+            "node": "Limpiar y etiquetar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limpiar y etiquetar": {
+      "main": [
+        [
+          {
+            "node": "Upsert noticia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert noticia": {
+      "main": [
+        [
+          {
+            "node": "¿Es nueva?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es nueva?": {
+      "main": [
+        [
+          {
+            "node": "Embeddings noticia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings noticia": {
+      "main": [
+        [
+          {
+            "node": "Guardar noticia en PGVector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bogota"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

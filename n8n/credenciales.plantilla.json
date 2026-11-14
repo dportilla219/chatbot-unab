@@ -1,0 +1,25 @@
+[
+  {
+    "id": "supabaseUnab01",
+    "name": "Supabase UNAB",
+    "type": "postgres",
+    "data": {
+      "host": "${PGHOST}",
+      "database": "postgres",
+      "user": "${PGUSER}",
+      "password": "${PGPASSWORD}",
+      "port": 5432,
+      "ssl": "require",
+      "allowUnauthorizedCerts": true
+    }
+  },
+  {
+    "id": "anthropicUnab01",
+    "name": "Anthropic Claude",
+    "type": "anthropicApi",
+    "data": {
+      "apiKey": "${ANTHROPIC_API_KEY}",
+      "url": "https://api.anthropic.com"
+    }
+  }
+]

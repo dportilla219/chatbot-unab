@@ -1,0 +1,6 @@
+fastmcp==4.2.0
+psycopg[binary]>=3.2
+psycopg-pool>=3.2
+fastembed>=0.5
+requests>=2.32
+beautifulsoup4>=4.12

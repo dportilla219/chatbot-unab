@@ -1,0 +1,243 @@
+{
+  "id": "unabRagIngesta01",
+  "name": "UNAB Chatbot - RAG Ingesta y embeddings",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Ingesta RAG\nLee /data/rag_docs (Reglamento, plan de estudios, CCD) → chunking por artículo/sección → embeddings multilingües 384d (servidor MCP /embed) → PGVector (academico.documento_chunk)",
+        "height": 150,
+        "width": 520,
+        "color": 5
+      },
+      "id": "1ff4eb09-ac6e-41c0-b296-7a0a93e841d6",
+      "name": "Nota 0",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        -260
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "eb38c6fe-51ad-4d1d-9e0f-eaed0cfdfe54",
+      "name": "Ejecutar ingesta",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "/data/rag_docs/*.{txt,md}",
+        "options": {}
+      },
+      "id": "51a857cc-c09b-4282-9915-c9e880783dbc",
+      "name": "Leer documentos",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        -20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "texto",
+        "options": {}
+      },
+      "id": "9f14eb3d-2ee9-4b0a-9d28-76f7175cde92",
+      "name": "Extraer texto",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst MAX = 1200, OVERLAP = 150;\nfunction ventanas(t) {\n  t = t.trim(); if (t.length <= MAX) return [t];\n  const out = []; let i = 0;\n  while (i < t.length) {\n    let j = Math.min(t.length, i + MAX);\n    if (j < t.length) { const k = t.lastIndexOf('. ', j); if (k > i + MAX/2) j = k + 1; }\n    out.push(t.slice(i, j).trim()); if (j >= t.length) break; i = Math.max(j - OVERLAP, i + 1);\n  }\n  return out;\n}\nconst items = [];\nconst leidos = $('Leer documentos').all();\nfor (const [idx, it] of $input.all().entries()) {\n  const nombre = leidos[idx]?.binary?.data?.fileName || it.binary?.data?.fileName || it.json.fileName || 'documento';\n  const texto = it.json.texto || '';\n  let fuente, titulo, chunks = [];\n  if (/reglamento/i.test(nombre)) {\n    fuente = 'reglamento'; titulo = 'Reglamento Estudiantil de Pregrado UNAB 2019';\n    let tit = '', cap = '';\n    for (const p of texto.split(/(?=ARTÍCULO\\s+\\d+\\.?)/)) {\n      for (const m of p.matchAll(/(TÍTULO\\s+[A-ZÁÉÍÓÚ]+[^\\n]*)/g)) tit = m[1].trim();\n      for (const m of p.matchAll(/(CAPÍTULO\\s+[A-ZÁÉÍÓÚ]+[^\\n]*)/g)) cap = m[1].trim();\n      const m = p.match(/^ARTÍCULO\\s+(\\d+)/); if (!m) continue;\n      const sec = `${tit} > ${cap} > Artículo ${m[1]}`;\n      for (const w of ventanas(p.replace(/\\s+/g, ' '))) chunks.push({ seccion: sec, contenido: `[Reglamento Estudiantil UNAB - ${sec}] ${w}` });\n    }\n  } else if (/\\.md$/i.test(nombre)) {\n    fuente = 'plan_estudios'; titulo = 'Plan de estudios Ingeniería de Sistemas UNAB';\n    for (const s of texto.split(/^(?=## )/m)) { const h = (s.trim().split('\\n')[0] || '').replace(/^#+\\s*/, '');\n      for (const w of ventanas(s)) chunks.push({ seccion: h, contenido: `[${titulo} - ${h}] ${w}` }); }\n  } else {\n    fuente = 'ccd'; titulo = 'Centro de Competencias Digitales y noticias UNAB';\n    for (const a of texto.split('=====')) { if (!a.trim()) continue; const h = (a.match(/TITULO:\\s*(.+)/) || [,'Noticia UNAB'])[1].trim();\n      for (const w of ventanas(a.replace(/IMAGENES:.*\\n/, ''))) chunks.push({ seccion: h, contenido: w }); }\n  }\n  chunks.forEach((c, i) => items.push({ json: { fuente, titulo, archivo: nombre, chunk_index: i, ...c } }));\n}\nreturn items;\n"
+      },
+      "id": "2065ba3b-2920-4284-912d-46036e3f1386",
+      "name": "Chunking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst all = $input.all().map(i => i.json); const out = [];\nfor (let i = 0; i < all.length; i += 16) out.push({ json: { lote: all.slice(i, i + 16) } });\nreturn out;\n"
+      },
+      "id": "405929f9-cb05-43c6-9ed3-f6b9d43c37c2",
+      "name": "Lotes de 16",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp:9000/embed",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ texts: $json.lote.map(c => c.contenido) }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "71296fa3-c6fd-4522-8c8f-e8d53a4dae32",
+      "name": "Generar embeddings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst out = [];\n$input.all().forEach((it, k) => {\n  const lote = $('Lotes de 16').all()[k].json.lote;\n  lote.forEach((c, i) => out.push({ json: { ...c, embedding: it.json.pgvector[i] } }));\n});\nreturn out;\n"
+      },
+      "id": "74f73ceb-158c-4aa2-b54d-1f0c9d0dc7e9",
+      "name": "Unir chunk + vector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO academico.documento_chunk (fuente, titulo, seccion, chunk_index, contenido, metadata, embedding)\nVALUES ($1, $2, $3, $4, $5, jsonb_build_object('archivo', $6::text), $7::vector)\nON CONFLICT (fuente, titulo, chunk_index) DO UPDATE\n  SET seccion = EXCLUDED.seccion, contenido = EXCLUDED.contenido, embedding = EXCLUDED.embedding, creado = now();",
+        "options": {
+          "queryReplacement": "={{ [ $json.fuente, $json.titulo, $json.seccion, $json.chunk_index, $json.contenido, $json.archivo, $json.embedding ] }}"
+        }
+      },
+      "id": "af69d3f8-5fd8-4c0d-a9c5-b43edf7444bc",
+      "name": "Guardar en PGVector",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1300,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "supabaseUnab01",
+          "name": "Supabase UNAB"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Ejecutar ingesta": {
+      "main": [
+        [
+          {
+            "node": "Leer documentos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer documentos": {
+      "main": [
+        [
+          {
+            "node": "Extraer texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer texto": {
+      "main": [
+        [
+          {
+            "node": "Chunking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunking": {
+      "main": [
+        [
+          {
+            "node": "Lotes de 16",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lotes de 16": {
+      "main": [
+        [
+          {
+            "node": "Generar embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar embeddings": {
+      "main": [
+        [
+          {
+            "node": "Unir chunk + vector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unir chunk + vector": {
+      "main": [
+        [
+          {
+            "node": "Guardar en PGVector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bogota"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
