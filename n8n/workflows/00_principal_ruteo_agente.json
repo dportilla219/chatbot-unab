@@ -9,7 +9,7 @@
         "width": 440,
         "color": 5
       },
-      "id": "1d9004ae-f983-476c-822a-7c03d1723aba",
+      "id": "bf90c4c9-bb9b-468d-a393-7ee3c1c26c29",
       "name": "Nota 0",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -25,7 +25,7 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "3d77eea6-8497-4397-bcda-10ec82ad54f1",
+      "id": "b96e14c7-2729-477d-8c8f-ad532893a2f6",
       "name": "Webhook chat",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -33,13 +33,13 @@
         -600,
         120
       ],
-      "webhookId": "6331634d-c4ab-4345-be89-bbc73a9b4b23"
+      "webhookId": "e6d9510c-8362-4067-8d82-356089824ea2"
     },
     {
       "parameters": {
         "jsCode": "\n// Guardrail determinístico de entrada\nconst b = $input.first().json.body ?? $input.first().json;\nconst id = String(b.id_estudiante || '').trim().toUpperCase();\nlet mensaje = String(b.mensaje || '').replace(/\\s+/g, ' ').trim().slice(0, 1200);\nconst motivos = [];\nif (!/^U\\d{8}$/.test(id)) motivos.push('Sesión inválida: falta un ID estudiantil válido.');\nif (!mensaje) motivos.push('Mensaje vacío.');\nconst otros = (mensaje.match(/U\\d{8}/gi) || []).map(x => x.toUpperCase()).filter(x => x !== id);\nif (otros.length) motivos.push('Solo puedo consultar la información del estudiante que inició sesión.');\nif (/(ignora|olvida|ignore).{0,30}(instrucciones|reglas|instructions)|system prompt|act[uú]a como|modo desarrollador|DAN\\b/i.test(mensaje))\n  motivos.push('La solicitud intenta modificar las reglas del asistente.');\nif (/\\b(?:\\d[ -]*?){13,16}\\b/.test(mensaje)) motivos.push('No compartas números de tarjeta ni datos financieros en el chat.');\nif (/(contrase[nñ]a|password|clave).{0,20}(de|del)?.{0,20}(portal|cosmos|banner|correo)/i.test(mensaje))\n  motivos.push('Nunca compartas tus contraseñas institucionales.');\nreturn [{ json: {\n  sessionId: String(b.sessionId || id), id_estudiante: id, nombre: String(b.nombre || ''),\n  programa: String(b.programa || 'Ingeniería de Sistemas'), mensaje,\n  bloqueado: motivos.length > 0, motivo: motivos.join(' '),\n  fecha_hoy: $now.setZone('America/Bogota').toFormat('yyyy-MM-dd')\n}}];\n"
       },
-      "id": "40e54d69-fd15-4103-bdc1-0f3c9fe49f8d",
+      "id": "0a1c9876-99ac-4ff0-98f3-819ad489f158",
       "name": "Normalizar entrada",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -59,7 +59,7 @@
           },
           "conditions": [
             {
-              "id": "6a098deb-2a77-4d92-be0a-3873806c7168",
+              "id": "e650dd18-2ce7-48b1-bef7-f03b55502de9",
               "leftValue": "={{ $json.bloqueado }}",
               "rightValue": true,
               "operator": {
@@ -73,7 +73,7 @@
         },
         "options": {}
       },
-      "id": "53c6f0e9-2bf8-4d18-9a5b-d79924dcd780",
+      "id": "9fe7d7fe-e18e-46ef-905f-4c8483128163",
       "name": "¿Bloqueado por reglas?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -109,7 +109,7 @@
           }
         }
       },
-      "id": "87c495a5-9044-4ea8-bddd-f7aabdca9623",
+      "id": "95cb8d83-cf00-4306-a5e8-a24653212ffe",
       "name": "Guardrails (Jailbreak/NSFW/PII)",
       "type": "@n8n/n8n-nodes-langchain.guardrails",
       "typeVersion": 2,
@@ -127,10 +127,11 @@
         },
         "options": {
           "temperature": 0,
-          "maxTokensToSample": 1500
+          "maxTokensToSample": 1500,
+          "thinking": false
         }
       },
-      "id": "fe211133-60c0-4bd8-aa59-439e425c4ff5",
+      "id": "041edb68-95af-4980-82dd-4765956b923e",
       "name": "Claude rápido (guardrails)",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.3,
@@ -149,7 +150,7 @@
       "parameters": {
         "jsCode": "\nconst e = $('Normalizar entrada').first().json;\nconst motivo = e.motivo || 'La consulta fue bloqueada por el módulo de seguridad (guardrails).';\nreturn [{ json: { respuesta: `🛡️ ${motivo}\\n\\nPuedo ayudarte con tu matrícula, avance académico, plan de estudios, competencias digitales, calendario, reglamento estudiantil y noticias de la UNAB.`,\n  intencion: 'bloqueado', bloqueado: true, motivo } }];\n"
       },
-      "id": "54c0d9a0-ccff-4e53-9661-de10e09c3d96",
+      "id": "af4aa394-9537-4cb2-9857-40dcaa18923a",
       "name": "Respuesta bloqueada",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -190,7 +191,7 @@
           "systemPromptTemplate": "Eres el enrutador del asistente académico de la UNAB. Clasifica el mensaje del estudiante en una de estas categorías: {categories}. Usa el formato indicado. No expliques, solo devuelve el JSON."
         }
       },
-      "id": "05a43382-ebc0-4ca7-9ea2-52ced2049f58",
+      "id": "09530b12-cd97-4bbd-a680-0644a37fd10d",
       "name": "Ruteo por intención",
       "type": "@n8n/n8n-nodes-langchain.textClassifier",
       "typeVersion": 1.1,
@@ -208,10 +209,11 @@
         },
         "options": {
           "temperature": 0,
-          "maxTokensToSample": 1500
+          "maxTokensToSample": 1500,
+          "thinking": false
         }
       },
-      "id": "ca881d1d-bfe3-40b1-ba61-21d8e76db2dd",
+      "id": "c7d5a876-5b50-47a1-964c-3b8b3f386a8c",
       "name": "Claude rápido (clasificador)",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.3,
@@ -233,7 +235,7 @@
         "width": 460,
         "color": 6
       },
-      "id": "3843cebf-5b7a-403b-a0ce-e812949e8ae0",
+      "id": "c34d92f6-af26-4fd7-ac0d-e5e7dcf5d501",
       "name": "Nota 9",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -253,7 +255,7 @@
           "timeout": 30000
         }
       },
-      "id": "c8060248-6e5d-4f4b-bcf5-4c5b59ec152b",
+      "id": "3a860268-cbc2-47c3-9a76-2efafff2ed21",
       "name": "01 Búsqueda RAG (pgvector)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -267,7 +269,7 @@
       "parameters": {
         "jsCode": "\nconst r = $input.first().json.resultados || [];\nconst ctx = r.map((d, i) => `[${i+1}] (${d.fuente} | ${d.seccion || d.titulo} | similitud ${d.similitud})\\n${d.contenido}`).join('\\n\\n');\nreturn [{ json: { intencion: 'consulta_general', contexto: ctx || 'Sin resultados en la base documental.',\n  instruccion: 'Responde usando SOLO los fragmentos recuperados (RAG). Cita el artículo o la fuente entre paréntesis. Si no está en los fragmentos, dilo y sugiere a quién acudir.' } }];\n"
       },
-      "id": "ae1d4b73-0f68-4490-8700-c5b1042d27ac",
+      "id": "569590fa-f08e-40f4-9d32-ef1bab85d52e",
       "name": "01 Contexto RAG",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -283,7 +285,7 @@
         "width": 460,
         "color": 6
       },
-      "id": "9825a06a-3a4d-4f18-bc92-e60b221b5b7a",
+      "id": "1a19d22c-81fd-40bc-8d1c-8e73b6253960",
       "name": "Nota 12",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -304,7 +306,7 @@
           "timeout": 20000
         }
       },
-      "id": "5479d23c-afde-4946-9c4c-9bcde904f032",
+      "id": "f410a3a6-22dc-4b47-ac37-38cf7771d101",
       "name": "02 Leer Google Sheet (calendario)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -318,7 +320,7 @@
       "parameters": {
         "jsCode": "\nconst csv = String($input.first().json.data || '');\nconst hoy = $('Normalizar entrada').first().json.fecha_hoy;\nfunction parse(line){ const out=[]; let cur='', q=false; for (const ch of line){ if(ch=='\"'){q=!q;continue;} if(ch==','&&!q){out.push(cur);cur='';} else cur+=ch;} out.push(cur); return out; }\nconst lines = csv.split(/\\r?\\n/).filter(l => l.trim());\nlet filas = [];\nif (lines.length > 1) {\n  const h = parse(lines[0]).map(x => x.trim());\n  filas = lines.slice(1).map(l => Object.fromEntries(parse(l).map((v, i) => [h[i], v.trim()])));\n}\nconst proximas = filas.filter(f => (f.fecha_fin || f.fecha_inicio) >= hoy).sort((a,b) => a.fecha_inicio.localeCompare(b.fecha_inicio));\nconst ctx = proximas.map(f => `- ${f.actividad} | ${f.categoria} | ${f.fecha_inicio}${f.fecha_fin && f.fecha_fin!==f.fecha_inicio ? ' a '+f.fecha_fin : ''} | Dirigido a: ${f.dirigido_a} | Fuente: ${f.fuente}`).join('\\n');\nreturn [{ json: { intencion: 'calendario',\n  contexto: ctx ? `Hoy es ${hoy}. Actividades vigentes o próximas del calendario académico (Google Sheets):\\n${ctx}` : 'No se pudo leer el Google Sheet; usa la herramienta calendario_academico del MCP.',\n  instruccion: 'Responde con las fechas exactas relevantes a la pregunta, en orden cronológico. Indica si la fecha es sintética o tomada de una publicación de unab.edu.co según la columna Fuente.' } }];\n"
       },
-      "id": "2d6e5437-f6a5-4463-a68f-dd45c53323dc",
+      "id": "c61b9119-554c-48ab-a685-77e74b92af7d",
       "name": "02 Contexto calendario",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -334,7 +336,7 @@
         "width": 460,
         "color": 6
       },
-      "id": "465c8344-5db4-46f0-bc56-221502fa42f7",
+      "id": "f0b1c969-6893-46ce-bdfd-e180a1a2d0e2",
       "name": "Nota 15",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -351,7 +353,7 @@
           "queryReplacement": "={{ $('Normalizar entrada').item.json.id_estudiante }}"
         }
       },
-      "id": "45431eab-04b5-4314-a719-c591f6cc5720",
+      "id": "e21c9115-87c1-47a6-9561-88679e80c445",
       "name": "03 Consultar BD estudiante",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -370,7 +372,7 @@
       "parameters": {
         "jsCode": "\nconst d = $input.first().json;\nreturn [{ json: { intencion: 'historial_personal', contexto: JSON.stringify(d, null, 1).slice(0, 9000),\n  instruccion: 'Responde de forma personalizada con los datos del estudiante. Para cursos realizados, notas por periodo, asignaturas pendientes o propuesta del próximo semestre usa las herramientas MCP (historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales). Da recomendaciones concretas para el éxito académico.' } }];\n"
       },
-      "id": "a710db81-d0b8-4916-9595-5a80711e778f",
+      "id": "55efa827-480e-4156-b0ac-1a6d9e69504a",
       "name": "03 Contexto historial",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -386,7 +388,7 @@
         "width": 460,
         "color": 6
       },
-      "id": "49a3897c-5a02-4834-81a9-03915c1dd6dd",
+      "id": "92fab88d-f2d8-4b28-a130-645e98ffcf7c",
       "name": "Nota 18",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -401,7 +403,7 @@
         "query": "SELECT titulo, to_char(fecha_pub,'YYYY-MM-DD') AS fecha, etiqueta, left(coalesce(contenido,resumen), 700) AS texto, url\nFROM academico.noticia ORDER BY fecha_pub DESC NULLS LAST LIMIT 8;",
         "options": {}
       },
-      "id": "22d2efad-5b43-4393-812e-68935682a0f0",
+      "id": "294317a0-5120-44ae-84af-8749a66de600",
       "name": "04 Consultar noticias",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -421,7 +423,7 @@
       "parameters": {
         "jsCode": "\nconst n = $input.all().map(i => i.json).filter(x => x.titulo);\nconst ctx = n.map(x => `- [${x.fecha}] (${x.etiqueta}) ${x.titulo}\\n  ${x.texto}\\n  Enlace: ${x.url}`).join('\\n');\nreturn [{ json: { intencion: 'noticias', contexto: ctx || 'Aún no hay noticias cargadas: ejecuta el workflow 04 (scraper).',\n  instruccion: 'Resume las noticias más relevantes para la pregunta (nuevos cursos, convocatorias, certificaciones). Incluye fecha y enlace.' } }];\n"
       },
-      "id": "fd3260f1-29ea-4c18-84aa-7cae2ae67e06",
+      "id": "c481361d-9796-42c2-9510-ca7c0f244c0e",
       "name": "04 Contexto noticias",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -434,7 +436,7 @@
       "parameters": {
         "jsCode": "\nreturn [{ json: { respuesta: 'Soy el asistente académico de la UNAB 🎓 y solo puedo ayudarte con temas de tu vida académica: matrícula, avance del plan de estudios, proyección de semestres, competencias digitales e insignia, calendario académico, Reglamento Estudiantil y noticias de la universidad. ¿Te ayudo con alguno?', intencion: 'fuera_de_alcance', bloqueado: false } }];\n"
       },
-      "id": "e5e03af7-1b9e-46ed-b9ca-ef21ae10a68a",
+      "id": "b87df1a1-8ed9-41ea-b926-98adef8994ab",
       "name": "Fuera de alcance",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -452,7 +454,7 @@
           "maxIterations": 8
         }
       },
-      "id": "a836e0cc-1152-457e-ba0a-4d3d3cbf871a",
+      "id": "ce602cc2-dd24-453f-aa20-77b982047863",
       "name": "Asistente UNAB (Agente)",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3,
@@ -470,10 +472,11 @@
         },
         "options": {
           "temperature": 0.3,
-          "maxTokensToSample": 1500
+          "maxTokensToSample": 1500,
+          "thinking": false
         }
       },
-      "id": "8818674a-b0a8-4e08-a04e-5230810d81a9",
+      "id": "9c264a12-6453-4ce2-b70a-b13bbdc2abdb",
       "name": "Claude (agente)",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.3,
@@ -495,7 +498,7 @@
         "tableName": "n8n_chat_histories",
         "contextWindowLength": 10
       },
-      "id": "76053b0e-457a-4a9c-9a31-a371cbdb439d",
+      "id": "107f047b-879e-4f74-bb1e-fcebcda3120f",
       "name": "Memoria persistente (Postgres)",
       "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
       "typeVersion": 1.3,
@@ -519,7 +522,7 @@
           "timeout": 60000
         }
       },
-      "id": "93dd0b62-ccc1-42e1-9957-a659ab9eec5a",
+      "id": "60d8fe29-d3db-4536-a73b-cce1563bff56",
       "name": "Servidor MCP (FastMCP)",
       "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
       "typeVersion": 1.2,
@@ -532,7 +535,7 @@
       "parameters": {
         "jsCode": "\nconst e = $('Normalizar entrada').first().json;\nlet intencion = 'desconocida';\nfor (const n of ['01 Contexto RAG','02 Contexto calendario','03 Contexto historial','04 Contexto noticias']) {\n  try { if ($(n).isExecuted) intencion = $(n).first().json.intencion; } catch (err) {}\n}\nlet txt = String($input.first().json.output ?? $input.first().json.text ?? '').trim();\n// No filtrar datos de otros estudiantes\ntxt = txt.replace(/U\\d{8}/g, m => m.toUpperCase() === e.id_estudiante ? m : '[ID oculto]');\n// No exponer cadenas de conexión ni claves\ntxt = txt.replace(/postgres(ql)?:\\/\\/\\S+/gi, '[oculto]').replace(/sk-ant-[\\w-]+/g, '[oculto]');\nif (!txt) txt = 'No pude generar una respuesta en este momento. Intenta reformular tu pregunta.';\nreturn [{ json: { respuesta: txt.slice(0, 6000), intencion, bloqueado: false } }];\n"
       },
-      "id": "10db0702-a1c4-442d-8241-ddf427f4879d",
+      "id": "c250b481-0393-4ea1-a91f-e3c1468567c0",
       "name": "Guardrail de salida",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -549,7 +552,7 @@
           "queryReplacement": "={{ [ $('Normalizar entrada').first().json.sessionId, $('Normalizar entrada').first().json.id_estudiante, $json.intencion, $('Normalizar entrada').first().json.mensaje, $json.respuesta, $json.bloqueado, $json.motivo || null ] }}"
         }
       },
-      "id": "0e47c502-0ffc-416e-93c4-863535fa04d3",
+      "id": "786428c3-8d10-42ee-9fc6-591c0516ffe9",
       "name": "Registrar conversación",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -571,7 +574,7 @@
         "responseBody": "={{ JSON.stringify({ respuesta: $('Respuesta final').first().json.respuesta, intencion: $('Respuesta final').first().json.intencion }) }}",
         "options": {}
       },
-      "id": "efa86e35-56ba-47c4-91ea-8738491cc048",
+      "id": "5cda8b3a-4f5f-4733-97b4-0796d6a66114",
       "name": "Responder",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
@@ -584,7 +587,7 @@
       "parameters": {
         "jsCode": "return [{ json: $input.first().json }];"
       },
-      "id": "434844f9-7be7-43d0-832a-d875fe13a9e6",
+      "id": "1e03a3eb-04b1-4506-9a85-6c0ccc04f215",
       "name": "Respuesta final",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

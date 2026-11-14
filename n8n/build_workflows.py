@@ -57,7 +57,7 @@ class WF:
 def anthropic(wf, name, model, pos, temp=0.2):
     return wf.add(name, "@n8n/n8n-nodes-langchain.lmChatAnthropic", 1.3,
                   {"model": {"__rl": True, "mode": "id", "value": model},
-                   "options": {"temperature": temp, "maxTokensToSample": 1500}}, pos, ANT)
+                   "options": {"temperature": temp, "maxTokensToSample": 1500, "thinking": False}}, pos, ANT)
 
 
 def pg_query(wf, name, sql, pos, replacement=None, always=False):
