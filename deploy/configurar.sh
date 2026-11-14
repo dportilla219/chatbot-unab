@@ -2,7 +2,6 @@
 # Configuración interactiva completa. Ejecutar en la EC2:  cd ~/chatbot-unab && bash deploy/configurar.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
-git pull -q || true
 [ -f .env ] || cp .env.example .env
 IP=$(curl -s https://checkip.amazonaws.com); DOM="$(echo "$IP" | tr . -).sslip.io"
 sed -i "s/^DOMINIO_BASE=.*/DOMINIO_BASE=$DOM/" .env
@@ -23,7 +22,7 @@ read -r -s -p "ANTHROPIC_API_KEY: " AK; echo; set_var ANTHROPIC_API_KEY "$AK"
 echo "Calendario: $(grep ^CALENDARIO_CSV_URL .env | cut -d= -f2-)"
 echo ">> 1/5 Base de datos";  bash deploy/cargar_bd.sh
 echo ">> 2/5 Contenedores";   sudo docker compose up -d --build
-echo ">> Esperando n8n...";   for i in $(seq 1 60); do sudo docker compose exec -T n8n wget -qO- localhost:5678/healthz >/dev/null 2>&1 && break; sleep 5; done
+echo ">> Esperando n8n...";   for i in $(seq 1 60); do sudo docker compose exec -T n8n node -e "fetch('http://localhost:5678/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1 && break; sleep 5; done
 echo ">> 3/5 Workflows n8n";  bash deploy/importar_n8n.sh
 echo ">> 4/5 RAG + noticias"; for i in $(seq 1 60); do curl -s localhost:9000/health >/dev/null && break; sleep 5; done; bash deploy/ingestar_rag.sh
 echo ">> 5/5 Verificación";   curl -s localhost:9000/health; echo
