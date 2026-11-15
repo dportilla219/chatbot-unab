@@ -120,6 +120,14 @@ Esquema `academico` en Supabase:
 
 Datos generados con `db/generar_datos_sinteticos.py` (Faker `es_CO`, semilla 2026): 300 estudiantes, simulación semestre a semestre con prerrequisitos, límites de carga, reprobación por fallas ≥ 20 % (Art. 46) y pérdida de cupo.
 
+**Tablas del esquema `academico` en Supabase** (300 estudiantes sintéticos):
+
+![Tablas en Supabase](docs/capturas/supabase_03_tablas_academico.png)
+
+**Vista analítica `v_proyeccion_grado`** (PGA, estado académico, carga máxima, semestres restantes y rutas CCD pendientes):
+
+![Vista de proyección](docs/capturas/supabase_04_vista_proyeccion.png)
+
 ## 5. RAG institucional
 
 | Documento | Fragmentos | Estrategia |
