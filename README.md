@@ -69,9 +69,9 @@ URLs del despliegue: `https://app.3-222-163-239.sslip.io` (app) · `https://n8n.
 | Base de datos PostgreSQL | `db/01_schema.sql`, `db/02_views.sql`, `db/03_seed.sql` (300 estudiantes) en Supabase | ✅ |
 | Workflows de n8n | `n8n/workflows/*.json` (principal, ingesta RAG, scraper) | ✅ |
 | Scraper de noticias | Workflow `04_scraper_noticias.json` + `mcp_server/scraper.py` | ✅ |
-| Aplicación Android | `app/` (PWA Gradio) + `android/` (proyecto Android Studio WebView) | ✅ |
+| Aplicación Android | `app/` (Gradio, instalable como PWA) + `android/` (WebView Kotlin). **APK compilado automáticamente con GitHub Actions** → [Releases](https://github.com/dportilla219/chatbot-unab/releases) | ✅ |
 | Documentación técnica | Este README + documento técnico + `docs/guion_video_demo.md` | ✅ |
-| Video demostración | Guion en `docs/guion_video_demo.md` | 🎬 grabar |
+| Video demostración | [`docs/video_demo_chatbot_unab.mp4`](docs/video_demo_chatbot_unab.mp4) (5 min 28 s) · guion en `docs/guion_video_demo.md` | ✅ |
 
 | Requisito técnico | Implementación |
 |---|---|
@@ -81,9 +81,27 @@ URLs del despliegue: `https://app.3-222-163-239.sslip.io` (app) · `https://n8n.
 | Servidor MCP FastMCP en AWS | `mcp_server/server.py`, HTTP streamable en `:9000/mcp` |
 | Ingesta, chunking y embeddings en n8n | Workflow *RAG Ingesta y embeddings* |
 | Guardrails | Reglas determinísticas + nodo **Guardrails** de n8n + categoría `manipulacion` del clasificador + guardrail de salida |
-| Memoria persistente | **Postgres Chat Memory** (sesión = ID del estudiante) |
+| Memoria persistente entre sesiones | **Postgres Chat Memory** (sesión = ID del estudiante, no la pestaña) + la app restaura el historial al iniciar sesión (`/historial`) |
 | Ruteo por intención | **Text Classifier** (Claude Haiku) con 6 categorías |
-| Clientes MCP | Nodo MCP Client de n8n; compatible con Claude Desktop |
+| Clientes MCP | Nodo MCP Client de n8n · `mcp_server/cliente_mcp_claude.py` (Claude + herramientas MCP) · configuración para Claude Desktop |
+
+**Objetivo y alcance funcional (diapositivas del enunciado)**
+
+| Lo que pide el enunciado | Cómo lo cumple |
+|---|---|
+| Matrícula y estado académico actual | Herramienta `estado_academico` + vista `v_resumen_estudiante` (Art. 24 y 40) |
+| Proyección de semestres restantes y alertas de requisitos | `proyeccion_y_recomendaciones` + vista `v_proyeccion_grado` (inglés B2, CCD, PGA de grado, Art. 67) |
+| Recomendaciones para el éxito (investigación, autoaprendizaje, educación de precisión) | `recomendaciones_exito` con los tres ejes, calculadas con el promedio por área, reprobaciones, fallas y prerrequisitos del estudiante |
+| Ruta y cursos: ¿qué cursos debo tomar? ¿qué es la insignia? | Propuesta de cursos por prerrequisitos y límite de carga · `competencias_digitales` + RAG del CCD |
+| RAG institucional (documentos del CCD con embeddings en pgvector) | `rag_docs/` → workflow de ingesta → `documento_chunk vector(384)` + búsqueda híbrida |
+| Calendario académico (inscripciones, pruebas diagnósticas, inicio de cursos) en Google Sheets | Ruta 02: lee el Google Sheet publicado como CSV (respaldo en `calendario_academico`) |
+| Historial personalizado: ¿qué cursos de competencias digitales he tomado? | Ruta 03 + `ccd_historial` (base sintética) |
+| Noticias: nuevos cursos, convocatorias y certificaciones por scraping periódico | Workflow 04 cada 6 h, etiquetas `CURSOS`, `CONVOCATORIA`, `CERTIFICACION`, `CCD` |
+| Workflow 01 · Pregunta → LLM → búsqueda RAG → respuesta | Búsqueda RAG inicial + el agente (LLM) vuelve a consultar `buscar_reglamento_y_documentos` cuando necesita más contexto |
+| Workflows 02, 03 y 04 | Rutas del clasificador: calendario (Google Sheets), historial (BD de estudiantes), noticias (scraper → BD) |
+| Guardrails que filtran y validan respuestas | Guardrails de entrada (reglas, nodo Guardrails, clasificador) y **guardrail de salida** |
+| Memoria persistente entre sesiones | Ver sección 8 |
+| Interacción con Claude a través del servidor MCP (FastMCP) | Agente de n8n + cliente Python `cliente_mcp_claude.py` (sección 7) |
 
 ## 3. Estructura del repositorio
 
@@ -189,6 +207,14 @@ Ejecuciones reales en el servidor de AWS (n8n 2.47.7 en EC2). Cada pregunta desd
 
 Rutas HTTP auxiliares: `/health`, `/auth`, `/historial`, `/embed`, `/rag/search` y `/scrape` (protegidas con `X-API-Key`).
 
+**Cliente MCP con Claude** (`mcp_server/cliente_mcp_claude.py`): se conecta al servidor por HTTP streamable, descubre las herramientas, se las ofrece a Claude y ejecuta las llamadas que Claude decida.
+```bash
+pip install fastmcp anthropic
+python mcp_server/cliente_mcp_claude.py --listar                                  # herramientas (sin costo)
+python mcp_server/cliente_mcp_claude.py --llamar estado_academico U00174957       # llamada directa
+ANTHROPIC_API_KEY=... python mcp_server/cliente_mcp_claude.py "Soy U00160001, ¿qué me recomiendas?"
+```
+
 Conectar **Claude Desktop** al servidor:
 ```json
 { "mcpServers": { "unab-academico": { "command": "npx", "args": ["mcp-remote", "https://mcp.3-222-163-239.sslip.io/mcp"] } } }
@@ -218,7 +244,7 @@ Fuente: API pública `unab.edu.co/wp-json/wp/v2/posts`, categorías Estudiantes 
 ## 10. Aplicación Android (Gradio)
 
 - **PWA**: desde Chrome en Android, ⋮ → *Agregar a la pantalla principal* (`launch(pwa=True)`).
-- **APK**: abrir `android/` en Android Studio, cambiar `APP_URL` en `app/build.gradle.kts` → *Build APK(s)*.
+- **APK**: se compila solo con GitHub Actions (`.github/workflows/android-apk.yml`) cada vez que cambia `android/`, y se publica en [Releases](https://github.com/dportilla219/chatbot-unab/releases) como `AsistenteUNAB.apk`. También se puede abrir `android/` en Android Studio → *Build APK(s)*.
 - Login con **nombre completo + ID (U00XXXXXX) + carrera**, validado contra la base de datos.
 
 **En un celular Android real** (PWA instalada desde Chrome):
