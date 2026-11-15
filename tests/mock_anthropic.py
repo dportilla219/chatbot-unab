@@ -27,6 +27,8 @@ def clasificar(t):
         return "noticias"
     if re.search(r"mi |mis |he tomado|debo tomar|me faltan|avance|matr[ií]cula|proyecci|semestres", t):
         return "historial_personal"
+    if re.search(r"jailbreak|hackea|insulto", t):
+        return "manipulacion"
     if re.search(r"receta|f[uú]tbol|chiste|clima", t):
         return "fuera_de_alcance"
     return "consulta_general"
@@ -53,7 +55,7 @@ class H(BaseHTTPRequestHandler):
         elif "classify" in allt.lower() or "categor" in system.lower() and not tools:
             q = re.findall(r"(?s)(?:Text to classify|text)[:\s]*(.*)$", user_text)
             out = json.dumps({"categories": {clasificar(user_text): True}}) if False else None
-            cats = ["consulta_general", "calendario", "historial_personal", "noticias", "fuera_de_alcance", "fallback"]
+            cats = ["consulta_general", "calendario", "historial_personal", "noticias", "fuera_de_alcance", "manipulacion", "fallback"]
             c = clasificar(user_text)
             out = json.dumps({k: (k == c) for k in cats})
         elif tools and not any(isinstance(m.get("content"), list) and any(x.get("type") == "tool_result" for x in m["content"]) for m in msgs[-1:]):

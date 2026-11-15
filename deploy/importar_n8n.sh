@@ -20,6 +20,7 @@ PY
 C=$(sudo docker compose ps -q n8n)
 sudo docker cp "$TMP" "$C":/tmp/creds.json && rm -f "$TMP"
 sudo docker cp n8n/workflows "$C":/tmp/workflows
+sudo docker compose exec -T n8n n8n unpublish:workflow --id=unabChatPrincip1 >/dev/null 2>&1 || true
 sudo docker compose exec -T n8n n8n import:credentials --input=/tmp/creds.json
 sudo docker compose exec -T n8n sh -c 'rm -f /tmp/creds.json'
 for f in 00_principal_ruteo_agente.json 01_rag_ingesta_embeddings.json 04_scraper_noticias.json; do
