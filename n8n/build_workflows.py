@@ -95,9 +95,12 @@ w.add("Webhook chat", "n8n-nodes-base.webhook", 2,
 code(w, "Normalizar entrada", r"""
 // Guardrail determinístico de entrada
 const b = $input.first().json.body ?? $input.first().json;
+const hdr = $input.first().json.headers || {};
+const token = $env.API_TOKEN || '';
 const id = String(b.id_estudiante || '').trim().toUpperCase();
 let mensaje = String(b.mensaje || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
 const motivos = [];
+if (token && hdr['x-api-key'] !== token) motivos.push('Acceso no autorizado: el chat solo acepta mensajes desde la app oficial con sesión iniciada.');
 if (!/^U\d{8}$/.test(id)) motivos.push('Sesión inválida: falta un ID estudiantil válido.');
 if (!mensaje) motivos.push('Mensaje vacío.');
 const otros = (mensaje.match(/U\d{8}/gi) || []).map(x => x.toUpperCase()).filter(x => x !== id);
