@@ -166,7 +166,11 @@ def competencias_digitales(id_estudiante: str) -> dict:
         "prueba_diagnostica": db.fetch_one("SELECT fecha, puntaje_pct, puntaje_pct>=70 AS valido_ruta1 FROM ccd_prueba_diagnostica WHERE id_estudiante=%s", (sid,)),
         "oferta": db.fetch_all("SELECT ruta, nombre_ruta, nombre AS curso, obligatorio FROM ccd_curso ORDER BY ruta, nombre"),
         "reglas": "Un curso por ruta (3 rutas). Ruta 1 obligatoria: Interacción Digital. Se recomienda terminarlas en los "
-                  "tres primeros semestres. Al graduarse se otorga la insignia digital. Contacto: ccdigital@unab.edu.co",
+                  "tres primeros semestres. Al graduarse se otorga la insignia digital. Prueba diagnóstica (estudiantes de "
+                  "primer ingreso): con más del 70 % se valida el curso Interacción Digital (Ruta 1) y se continúa con las rutas 2 y 3; "
+                  "si no se alcanza, se recomienda cursar Interacción Digital en el primer semestre. Las pruebas de suficiencia ya no "
+                  "aplican para estudiantes continuos. Homologación: Ruta 1 con Cultura Digital y Vida en Línea; Ruta 2 con MS Word "
+                  "o MS PowerPoint; Ruta 3 con MS Excel. Contacto: ccdigital@unab.edu.co · (607) 643 6111 ext. 1807/1644",
     }
 
 

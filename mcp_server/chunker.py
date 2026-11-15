@@ -73,6 +73,8 @@ def chunk_documento(nombre: str, text: str):
     n = nombre.lower()
     if "reglamento" in n:
         return "reglamento", "Reglamento Estudiantil de Pregrado UNAB 2019", chunk_reglamento(text)
+    if "frecuentes" in n:
+        return "ccd", "Preguntas frecuentes CCD UNAB", chunk_markdown(text, "Preguntas frecuentes CCD")
     if n.endswith(".md"):
         return "plan_estudios", "Plan de estudios Ingeniería de Sistemas UNAB", chunk_markdown(text, "Plan de estudios Ingeniería de Sistemas UNAB")
     return "ccd", "Centro de Competencias Digitales y noticias UNAB", chunk_articulos(text)

@@ -158,7 +158,7 @@ code(w, "01 Contexto RAG", r"""
 const r = $input.first().json.resultados || [];
 const ctx = r.map((d, i) => `[${i+1}] (${d.fuente} | ${d.seccion || d.titulo} | similitud ${d.similitud})\n${d.contenido}`).join('\n\n');
 return [{ json: { intencion: 'consulta_general', contexto: ctx || 'Sin resultados en la base documental.',
-  instruccion: 'Responde usando SOLO los fragmentos recuperados (RAG). Cita el artículo o la fuente entre paréntesis. Si no está en los fragmentos, dilo y sugiere a quién acudir.' } }];
+  instruccion: 'Responde con los fragmentos recuperados (RAG) y cita el artículo o la fuente entre paréntesis. Si los fragmentos no bastan, ANTES de decir que no sabes usa las herramientas MCP: plan_de_estudios (materias, semestres, créditos, prerrequisitos), competencias_digitales (rutas, insignia, prueba diagnóstica, homologaciones), buscar_reglamento_y_documentos con otras palabras, calendario_academico. Si la pregunta es en primera persona (puedo, mi, me, tengo), consulta también los datos del estudiante (estado_academico, proyeccion_y_recomendaciones) y responde para su caso. Solo si nada de eso tiene la respuesta, dilo y sugiere a quién acudir.' } }];
 """, [960, -420])
 
 # ---- Workflow 02: calendario -> Google Sheets (CSV publicado)
@@ -341,6 +341,10 @@ for (const [idx, it] of $input.all().entries()) {
       const sec = `${tit} > ${cap} > Artículo ${m[1]}`;
       for (const w of ventanas(p.replace(/\s+/g, ' '))) chunks.push({ seccion: sec, contenido: `[Reglamento UNAB, Art. ${m[1]}] ${w}` });
     }
+  } else if (/frecuentes/i.test(nombre)) {
+    fuente = 'ccd'; titulo = 'Preguntas frecuentes CCD UNAB';
+    for (const s of texto.split(/^(?=## )/m)) { const h = (s.trim().split('\n')[0] || '').replace(/^#+\s*/, '');
+      for (const w of ventanas(s)) chunks.push({ seccion: h, contenido: `[Preguntas frecuentes CCD - ${h}] ${w}` }); }
   } else if (/\.md$/i.test(nombre)) {
     fuente = 'plan_estudios'; titulo = 'Plan de estudios Ingeniería de Sistemas UNAB';
     for (const s of texto.split(/^(?=## )/m)) { const h = (s.trim().split('\n')[0] || '').replace(/^#+\s*/, '');
