@@ -7,8 +7,8 @@ Los fragmentos largos se dividen en ventanas de ~1200 caracteres con 150 de sola
 """
 import re
 
-MAX = 1200
-OVERLAP = 150
+MAX = 600       # el modelo MiniLM lee ~128 tokens: fragmentos cortos
+OVERLAP = 120
 
 
 def _window(text: str):
@@ -42,7 +42,7 @@ def chunk_reglamento(text: str):
         body = re.sub(r"\s+", " ", p).strip()
         seccion = f"{titulo} > {capitulo} > Artículo {m.group(1)}".strip(" >")
         for w in _window(body):
-            chunks.append({"seccion": seccion, "contenido": f"[Reglamento Estudiantil UNAB - {seccion}] {w}"})
+            chunks.append({"seccion": seccion, "contenido": f"[Reglamento UNAB, Art. {m.group(1)}] {w}"})
     return chunks
 
 
@@ -51,7 +51,7 @@ def chunk_markdown(text: str, titulo_doc: str):
     for sec in re.split(r"(?m)^(?=## )", text):
         head = sec.strip().splitlines()[0].lstrip("# ").strip() if sec.strip() else ""
         for w in _window(sec):
-            chunks.append({"seccion": head, "contenido": f"[{titulo_doc} - {head}] {w}"})
+            chunks.append({"seccion": head, "contenido": f"[Plan de estudios - {head}] {w}"})
     return chunks
 
 

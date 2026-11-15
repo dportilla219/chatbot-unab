@@ -9,7 +9,7 @@
         "width": 520,
         "color": 5
       },
-      "id": "41773741-369d-4bd2-accd-8dcacf3e4188",
+      "id": "3b382705-9aa2-4c90-a212-35ad68be2bfb",
       "name": "Nota 0",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -20,7 +20,7 @@
     },
     {
       "parameters": {},
-      "id": "738ccc88-e4cf-42c5-a115-c03ff28b7b31",
+      "id": "82163cc9-b163-4bad-b69b-81f04b1eead7",
       "name": "Ejecutar ingesta",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
@@ -35,7 +35,7 @@
         "fileSelector": "/data/rag_docs/*.{txt,md}",
         "options": {}
       },
-      "id": "0bddfdcc-776f-49ca-a775-8f8d9522cb36",
+      "id": "7662e8b7-e1fb-46d7-8398-69f2000db482",
       "name": "Leer documentos",
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1.1,
@@ -50,7 +50,7 @@
         "destinationKey": "texto",
         "options": {}
       },
-      "id": "80f27240-151d-4ebd-8f56-036754a5e576",
+      "id": "8f9fb273-3874-492c-87a5-6e887cbcaa8a",
       "name": "Extraer texto",
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1.1,
@@ -61,9 +61,9 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst MAX = 1200, OVERLAP = 150;\nfunction ventanas(t) {\n  t = t.trim(); if (t.length <= MAX) return [t];\n  const out = []; let i = 0;\n  while (i < t.length) {\n    let j = Math.min(t.length, i + MAX);\n    if (j < t.length) { const k = t.lastIndexOf('. ', j); if (k > i + MAX/2) j = k + 1; }\n    out.push(t.slice(i, j).trim()); if (j >= t.length) break; i = Math.max(j - OVERLAP, i + 1);\n  }\n  return out;\n}\nconst items = [];\nconst leidos = $('Leer documentos').all();\nfor (const [idx, it] of $input.all().entries()) {\n  const nombre = leidos[idx]?.binary?.data?.fileName || it.binary?.data?.fileName || it.json.fileName || 'documento';\n  const texto = it.json.texto || '';\n  let fuente, titulo, chunks = [];\n  if (/reglamento/i.test(nombre)) {\n    fuente = 'reglamento'; titulo = 'Reglamento Estudiantil de Pregrado UNAB 2019';\n    let tit = '', cap = '';\n    for (const p of texto.split(/(?=ARTÍCULO\\s+\\d+\\.?)/)) {\n      for (const m of p.matchAll(/(TÍTULO\\s+[A-ZÁÉÍÓÚ]+[^\\n]*)/g)) tit = m[1].trim();\n      for (const m of p.matchAll(/(CAPÍTULO\\s+[A-ZÁÉÍÓÚ]+[^\\n]*)/g)) cap = m[1].trim();\n      const m = p.match(/^ARTÍCULO\\s+(\\d+)/); if (!m) continue;\n      const sec = `${tit} > ${cap} > Artículo ${m[1]}`;\n      for (const w of ventanas(p.replace(/\\s+/g, ' '))) chunks.push({ seccion: sec, contenido: `[Reglamento Estudiantil UNAB - ${sec}] ${w}` });\n    }\n  } else if (/\\.md$/i.test(nombre)) {\n    fuente = 'plan_estudios'; titulo = 'Plan de estudios Ingeniería de Sistemas UNAB';\n    for (const s of texto.split(/^(?=## )/m)) { const h = (s.trim().split('\\n')[0] || '').replace(/^#+\\s*/, '');\n      for (const w of ventanas(s)) chunks.push({ seccion: h, contenido: `[${titulo} - ${h}] ${w}` }); }\n  } else {\n    fuente = 'ccd'; titulo = 'Centro de Competencias Digitales y noticias UNAB';\n    for (const a of texto.split('=====')) { if (!a.trim()) continue; const h = (a.match(/TITULO:\\s*(.+)/) || [,'Noticia UNAB'])[1].trim();\n      for (const w of ventanas(a.replace(/IMAGENES:.*\\n/, ''))) chunks.push({ seccion: h, contenido: w }); }\n  }\n  chunks.forEach((c, i) => items.push({ json: { fuente, titulo, archivo: nombre, chunk_index: i, ...c } }));\n}\nreturn items;\n"
+        "jsCode": "\nconst MAX = 600, OVERLAP = 120;\nfunction ventanas(t) {\n  t = t.trim(); if (t.length <= MAX) return [t];\n  const out = []; let i = 0;\n  while (i < t.length) {\n    let j = Math.min(t.length, i + MAX);\n    if (j < t.length) { const k = t.lastIndexOf('. ', j); if (k > i + MAX/2) j = k + 1; }\n    out.push(t.slice(i, j).trim()); if (j >= t.length) break; i = Math.max(j - OVERLAP, i + 1);\n  }\n  return out;\n}\nconst items = [];\nconst leidos = $('Leer documentos').all();\nfor (const [idx, it] of $input.all().entries()) {\n  const nombre = leidos[idx]?.binary?.data?.fileName || it.binary?.data?.fileName || it.json.fileName || 'documento';\n  const texto = it.json.texto || '';\n  let fuente, titulo, chunks = [];\n  if (/reglamento/i.test(nombre)) {\n    fuente = 'reglamento'; titulo = 'Reglamento Estudiantil de Pregrado UNAB 2019';\n    let tit = '', cap = '';\n    for (const p of texto.split(/(?=ARTÍCULO\\s+\\d+\\.?)/)) {\n      for (const m of p.matchAll(/(TÍTULO\\s+[A-ZÁÉÍÓÚ]+[^\\n]*)/g)) tit = m[1].trim();\n      for (const m of p.matchAll(/(CAPÍTULO\\s+[A-ZÁÉÍÓÚ]+[^\\n]*)/g)) cap = m[1].trim();\n      const m = p.match(/^ARTÍCULO\\s+(\\d+)/); if (!m) continue;\n      const sec = `${tit} > ${cap} > Artículo ${m[1]}`;\n      for (const w of ventanas(p.replace(/\\s+/g, ' '))) chunks.push({ seccion: sec, contenido: `[Reglamento UNAB, Art. ${m[1]}] ${w}` });\n    }\n  } else if (/\\.md$/i.test(nombre)) {\n    fuente = 'plan_estudios'; titulo = 'Plan de estudios Ingeniería de Sistemas UNAB';\n    for (const s of texto.split(/^(?=## )/m)) { const h = (s.trim().split('\\n')[0] || '').replace(/^#+\\s*/, '');\n      for (const w of ventanas(s)) chunks.push({ seccion: h, contenido: `[Plan de estudios - ${h}] ${w}` }); }\n  } else {\n    fuente = 'ccd'; titulo = 'Centro de Competencias Digitales y noticias UNAB';\n    for (const a of texto.split('=====')) { if (!a.trim()) continue; const h = (a.match(/TITULO:\\s*(.+)/) || [,'Noticia UNAB'])[1].trim();\n      for (const w of ventanas(a.replace(/IMAGENES:.*\\n/, ''))) chunks.push({ seccion: h, contenido: w }); }\n  }\n  chunks.forEach((c, i) => items.push({ json: { fuente, titulo, archivo: nombre, chunk_index: i, ...c } }));\n}\nreturn items;\n"
       },
-      "id": "df786fd7-1f4e-4782-a2a1-fea8e787f5e1",
+      "id": "32bf9184-321d-4678-875a-c38e83b7e93b",
       "name": "Chunking",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -76,7 +76,7 @@
       "parameters": {
         "jsCode": "\nconst all = $input.all().map(i => i.json); const out = [];\nfor (let i = 0; i < all.length; i += 16) out.push({ json: { lote: all.slice(i, i + 16) } });\nreturn out;\n"
       },
-      "id": "79230f1b-4dc9-4614-8545-715eeaf9af9e",
+      "id": "0c0b5ece-6836-4503-b523-58f3c3c5785d",
       "name": "Lotes de 16",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -105,7 +105,7 @@
           "timeout": 120000
         }
       },
-      "id": "49667007-0c96-4069-b868-aeda6fd7b30c",
+      "id": "70bb3f4c-ddf1-4162-800c-1557200f8424",
       "name": "Generar embeddings",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -118,7 +118,7 @@
       "parameters": {
         "jsCode": "\nconst out = [];\n$input.all().forEach((it, k) => {\n  const lote = $('Lotes de 16').all()[k].json.lote;\n  lote.forEach((c, i) => out.push({ json: { ...c, embedding: it.json.pgvector[i] } }));\n});\nreturn out;\n"
       },
-      "id": "a026ab17-7f3c-4460-aded-a62ef358bbe2",
+      "id": "eacc618b-8f70-4003-b8ec-ce95d6a74a84",
       "name": "Unir chunk + vector",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -135,7 +135,7 @@
           "queryReplacement": "={{ [ $json.fuente, $json.titulo, $json.seccion, $json.chunk_index, $json.contenido, $json.archivo, $json.embedding ] }}"
         }
       },
-      "id": "d2111e99-f475-477a-85b4-9d048fbb449a",
+      "id": "07ae139f-c129-4298-b2e9-53a0b6839973",
       "name": "Guardar en PGVector",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,

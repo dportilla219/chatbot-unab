@@ -152,7 +152,7 @@ anthropic(w, "Claude rápido (clasificador)", MODELO_RAPIDO, [380, 440], 0, no_t
 w.note("### 01 Consulta general\nPregunta → búsqueda RAG (pgvector) → LLM → respuesta", [660, -535], 460, 95, 6)
 w.add("01 Búsqueda RAG (pgvector)", "n8n-nodes-base.httpRequest", 4.2,
       {"method": "POST", "url": f"{MCP_URL}/rag/search", "sendBody": True, "specifyBody": "json",
-       "jsonBody": "={{ JSON.stringify({ query: $('Normalizar entrada').item.json.mensaje, k: 6 }) }}", "options": {"timeout": 30000}},
+       "jsonBody": "={{ JSON.stringify({ query: $('Normalizar entrada').item.json.mensaje, k: 8 }) }}", "options": {"timeout": 30000}},
       [700, -420], onError="continueRegularOutput")
 code(w, "01 Contexto RAG", r"""
 const r = $input.first().json.resultados || [];
@@ -314,7 +314,7 @@ r.add("Leer documentos", "n8n-nodes-base.readWriteFile", 1.1,
 r.add("Extraer texto", "n8n-nodes-base.extractFromFile", 1.1,
       {"operation": "text", "destinationKey": "texto", "options": {}}, [200, 0])
 code(r, "Chunking", r"""
-const MAX = 1200, OVERLAP = 150;
+const MAX = 600, OVERLAP = 120;
 function ventanas(t) {
   t = t.trim(); if (t.length <= MAX) return [t];
   const out = []; let i = 0;
@@ -339,12 +339,12 @@ for (const [idx, it] of $input.all().entries()) {
       for (const m of p.matchAll(/(CAPÍTULO\s+[A-ZÁÉÍÓÚ]+[^\n]*)/g)) cap = m[1].trim();
       const m = p.match(/^ARTÍCULO\s+(\d+)/); if (!m) continue;
       const sec = `${tit} > ${cap} > Artículo ${m[1]}`;
-      for (const w of ventanas(p.replace(/\s+/g, ' '))) chunks.push({ seccion: sec, contenido: `[Reglamento Estudiantil UNAB - ${sec}] ${w}` });
+      for (const w of ventanas(p.replace(/\s+/g, ' '))) chunks.push({ seccion: sec, contenido: `[Reglamento UNAB, Art. ${m[1]}] ${w}` });
     }
   } else if (/\.md$/i.test(nombre)) {
     fuente = 'plan_estudios'; titulo = 'Plan de estudios Ingeniería de Sistemas UNAB';
     for (const s of texto.split(/^(?=## )/m)) { const h = (s.trim().split('\n')[0] || '').replace(/^#+\s*/, '');
-      for (const w of ventanas(s)) chunks.push({ seccion: h, contenido: `[${titulo} - ${h}] ${w}` }); }
+      for (const w of ventanas(s)) chunks.push({ seccion: h, contenido: `[Plan de estudios - ${h}] ${w}` }); }
   } else {
     fuente = 'ccd'; titulo = 'Centro de Competencias Digitales y noticias UNAB';
     for (const a of texto.split('=====')) { if (!a.trim()) continue; const h = (a.match(/TITULO:\s*(.+)/) || [,'Noticia UNAB'])[1].trim();

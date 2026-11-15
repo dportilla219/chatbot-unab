@@ -240,7 +240,7 @@ def autenticar(nombre_completo: str, id_estudiante: str, programa: str) -> dict:
 
 def rag_search(pregunta: str, k: int = 5, fuente: str | None = None) -> list[dict]:
     v = to_pgvector(embed([pregunta])[0])
-    rows = db.fetch_all("SELECT * FROM buscar_chunks(%s::vector, %s, %s)", (v, min(k, 10), fuente))
+    rows = db.fetch_all("SELECT * FROM buscar_hibrido(%s::vector, %s, %s, %s)", (v, pregunta, min(k, 10), fuente))
     return [{**r, "similitud": round(r["similitud"], 3)} for r in rows]
 
 
