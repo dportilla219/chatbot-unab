@@ -187,7 +187,7 @@ Ejecuciones reales en el servidor de AWS (n8n 2.47.7 en EC2). Cada pregunta desd
 | `calendario_academico` | Fechas (respaldo en BD) |
 | `noticias_recientes` | Noticias por etiqueta o palabra clave |
 
-Rutas HTTP auxiliares: `/health`, `/auth`, `/embed`, `/rag/search` y `/scrape` (protegidas con `X-API-Key`).
+Rutas HTTP auxiliares: `/health`, `/auth`, `/historial`, `/embed`, `/rag/search` y `/scrape` (protegidas con `X-API-Key`).
 
 Conectar **Claude Desktop** al servidor:
 ```json
@@ -204,6 +204,8 @@ Conectar **Claude Desktop** al servidor:
 | Guardrail de salida | Oculta IDs ajenos, cadenas de conexión y claves |
 
 **Memoria persistente**: nodo *Postgres Chat Memory* en Supabase, con sesión = ID del estudiante y ventana de 10 turnos. Permite preguntas de seguimiento ("¿y cuántos cursos puedo matricular entonces?").
+
+**Memoria entre sesiones**: como la sesión del agente es el ID del estudiante (no la pestaña del navegador), el agente sigue recordando la conversación aunque el estudiante recargue la app, cierre sesión o entre desde otro dispositivo. Además, al iniciar sesión la app pide a la ruta `/historial` del servidor MCP los últimos 10 intercambios guardados en `academico.chat_log` y los vuelve a mostrar en el chat. La ruta exige la API key y el mismo nombre + ID del login.
 
 Tabla `n8n_chat_histories` en Supabase con las conversaciones guardadas (mensajes del estudiante, respuestas y llamadas a herramientas MCP):
 

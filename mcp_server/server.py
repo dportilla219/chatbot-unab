@@ -266,6 +266,23 @@ async def auth_route(request: Request):
     return JSONResponse(autenticar(b.get("nombre_completo", ""), b.get("id_estudiante", ""), b.get("programa", "Ingeniería de Sistemas")))
 
 
+@mcp.custom_route("/historial", methods=["POST"])
+async def historial_route(request: Request):
+    """Últimos intercambios del estudiante (para restaurar el chat al volver a iniciar sesión).
+    Exige el mismo nombre + ID que el login, además de la API key."""
+    if not _authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    b = await request.json()
+    a = autenticar(b.get("nombre_completo", ""), b.get("id_estudiante", ""), b.get("programa", "Ingeniería de Sistemas"))
+    if not a.get("ok"):
+        return JSONResponse({"ok": False, "mensajes": []})
+    n = max(1, min(int(b.get("limite", 10)), 30))
+    rows = db.fetch_all("""SELECT pregunta, respuesta, intencion, to_char(creado, 'YYYY-MM-DD HH24:MI') AS fecha
+                           FROM chat_log WHERE id_estudiante = %s AND respuesta IS NOT NULL
+                           ORDER BY id DESC LIMIT %s""", (a["estudiante"]["id_estudiante"], n))
+    return JSONResponse({"ok": True, "mensajes": list(reversed(rows))})
+
+
 @mcp.custom_route("/embed", methods=["POST"])
 async def embed_route(request: Request):
     if not _authorized(request):

@@ -47,6 +47,24 @@ HEADER = """<div id='header'><h1>🎓 Asistente Académico UNAB</h1>
 <p>Ingeniería de Sistemas · Matrícula, plan de estudios, competencias digitales y reglamento</p></div>"""
 
 
+def historial_previo(nombre, sid, programa, limite=10):
+    """Recupera los últimos intercambios guardados en chat_log (memoria entre sesiones)."""
+    try:
+        r = requests.post(f"{API_URL}/historial", json={"nombre_completo": nombre, "id_estudiante": sid,
+                                                         "programa": programa, "limite": limite},
+                          headers=HDR, timeout=15).json()
+    except Exception:  # noqa: BLE001
+        return []
+    msgs = []
+    for i, m in enumerate(r.get("mensajes") or []):
+        if i == 0:
+            msgs.append({"role": "assistant", "content": f"<sub>📜 Conversación anterior · desde {m['fecha']}</sub>"})
+        msgs.append({"role": "user", "content": m["pregunta"]})
+        txt = m["respuesta"] + (f"\n\n<sub>🔀 ruta: {m['intencion']}</sub>" if m.get("intencion") else "")
+        msgs.append({"role": "assistant", "content": txt})
+    return msgs
+
+
 def login(nombre, sid, programa, state):
     try:
         r = requests.post(f"{API_URL}/auth", json={"nombre_completo": nombre, "id_estudiante": sid,
@@ -58,6 +76,13 @@ def login(nombre, sid, programa, state):
     est = r["estudiante"]
     state = {"id": est["id_estudiante"], "nombre": est["nombre_completo"], "programa": est["programa"],
              "semestre": est["semestre_actual"], "session": f"{est['id_estudiante']}"}
+    previos = historial_previo(nombre, sid, programa)
+    if previos:
+        saludo = (f"---\n\n¡Hola de nuevo, **{est['nombre_completo'].split()[0]}**! 👋 Arriba está nuestra conversación anterior; "
+                  "la recuerdo, así que puedes continuar donde la dejaste o preguntarme algo nuevo.")
+        return (state, gr.update(visible=False), gr.update(visible=True),
+                f"✅ Sesión iniciada: {est['nombre_completo']} ({est['id_estudiante']})",
+                previos + [{"role": "assistant", "content": saludo}])
     saludo = (f"¡Hola, **{est['nombre_completo'].split()[0]}**! 👋 Soy tu asistente académico. "
               f"Estás en **{est['programa']}**, semestre {est['semestre_actual']}. "
               "Puedo ayudarte con tu matrícula, avance del plan, proyección de grado, competencias digitales, "
