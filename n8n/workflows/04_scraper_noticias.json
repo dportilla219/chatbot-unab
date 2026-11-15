@@ -9,7 +9,7 @@
         "width": 560,
         "color": 5
       },
-      "id": "affcd79b-a85b-4734-8270-fa5c1df6b258",
+      "id": "be18fe6a-d0ce-4da6-a31f-0e701be7fdad",
       "name": "Nota 0",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -29,7 +29,7 @@
           ]
         }
       },
-      "id": "a3b167da-0a4d-4ba4-b053-c45da9fc0d4b",
+      "id": "279a71bb-76a2-44cb-9cbe-6fb278354067",
       "name": "Cada 6 horas",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
@@ -40,7 +40,7 @@
     },
     {
       "parameters": {},
-      "id": "01a4625c-6d9d-442e-919a-2bac96cecdf9",
+      "id": "65bb5eec-513c-460f-a4ca-79d163f2dbac",
       "name": "Ejecutar manualmente",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
@@ -53,7 +53,7 @@
       "parameters": {
         "jsCode": "\nreturn [232, 556, 134].map(c => ({ json: { categoria: c } }));\n"
       },
-      "id": "c7d53315-6f6a-4bcb-a153-09e83937d9c1",
+      "id": "11bdc869-d209-43ac-8db8-ba7ba6a26901",
       "name": "Categorías a consultar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -100,7 +100,7 @@
           }
         }
       },
-      "id": "9e0b67b8-20c4-493e-beaf-d1edb733a520",
+      "id": "8ff13dee-cb1e-4afe-b520-47e0c969dfb6",
       "name": "GET unab.edu.co wp-json",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -114,7 +114,7 @@
       "parameters": {
         "jsCode": "\nconst limpiar = h => String(h || '').replace(/<\\/(p|li|h\\d|tr)>/gi, '\\n').replace(/<br\\s*\\/?>/gi, '\\n').replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#8217;|&#8216;/g, \"'\").replace(/&#8220;|&#8221;|&quot;/g, '\"').replace(/&#8211;/g, '–')\n  .replace(/&#\\d+;/g, ' ').replace(/[ \\t]+/g, ' ').replace(/\\n\\s*\\n+/g, '\\n\\n').trim();\nconst reglas = [['CCD', /competencias digitales|\\bccd\\b|insignia|interacci[oó]n digital/i], ['CERTIFICACION', /certificaci[oó]n|certificado|examen|celpe|toefl|ielts|prueba de/i],\n  ['CONVOCATORIA', /convocatoria|inscripci|elecciones|beca|postula|abiertas/i], ['CURSOS', /curso|diplomado|taller|vacacional|intensivo|capacitaci/i]];\nconst vistos = new Set(); const out = [];\nfor (const it of $input.all()) {\n  const p = it.json; if (!p || !p.id || vistos.has(p.id)) continue; vistos.add(p.id);\n  const titulo = limpiar(p.title?.rendered), contenido = limpiar(p.content?.rendered);\n  const base = (titulo + ' ' + contenido.slice(0, 600));\n  const etiqueta = (reglas.find(([, rx]) => rx.test(base)) || ['GENERAL'])[0];\n  out.push({ json: { id_wp: p.id, titulo, url: p.link, fecha_pub: p.date, resumen: limpiar(p.excerpt?.rendered).slice(0, 500),\n    contenido, categorias: (p.categories || []).join(','), etiqueta } });\n}\nreturn out;\n"
       },
-      "id": "fde4210d-6557-4893-8b94-3b33d60af29a",
+      "id": "92b4d092-1696-49db-8677-d57ad0a1d5bb",
       "name": "Limpiar y etiquetar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -131,7 +131,7 @@
           "queryReplacement": "={{ [ $json.id_wp, $json.titulo, $json.url, $json.fecha_pub, $json.resumen, $json.contenido, $json.categorias, $json.etiqueta ] }}"
         }
       },
-      "id": "2f2c7b87-22f0-46a9-a673-dc63eac28166",
+      "id": "2830e652-a956-4e0e-98a7-16322ca54276",
       "name": "Upsert noticia",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -157,7 +157,7 @@
           },
           "conditions": [
             {
-              "id": "83661c35-9842-4ea3-a6d6-806d49ea1814",
+              "id": "70700d78-5ed4-40c5-8661-3fee5e265d1e",
               "leftValue": "={{ $json.es_nueva }}",
               "rightValue": true,
               "operator": {
@@ -171,7 +171,7 @@
         },
         "options": {}
       },
-      "id": "df4b08ee-a13f-4b2d-8b34-33901fc2744f",
+      "id": "2285ec23-a265-4470-9e98-66f1f9249eed",
       "name": "¿Es nueva?",
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.2,
@@ -200,7 +200,7 @@
           "timeout": 60000
         }
       },
-      "id": "2931f946-ae8c-4285-8ce0-1d2a671adcd5",
+      "id": "b25b4496-3e9a-4792-b57f-f539d63410f7",
       "name": "Embeddings noticia",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -217,7 +217,7 @@
           "queryReplacement": "={{ [ $('¿Es nueva?').item.json.titulo, $('¿Es nueva?').item.json.etiqueta, '[Noticia UNAB ' + String($('¿Es nueva?').item.json.fecha_pub).slice(0,10) + ' - ' + $('¿Es nueva?').item.json.titulo + '] ' + String($('¿Es nueva?').item.json.contenido).slice(0,1500), $('¿Es nueva?').item.json.url, $json.pgvector[0] ] }}"
         }
       },
-      "id": "460b9e52-94ca-471d-95e1-253e9ce3a4bd",
+      "id": "53db93a3-0e9d-45fe-929e-875dd27c80ac",
       "name": "Guardar noticia en PGVector",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
