@@ -19,6 +19,7 @@ json.dump(cred,open(sys.argv[1],"w"))
 PY
 C=$(sudo docker compose ps -q n8n)
 sudo docker cp "$TMP" "$C":/tmp/creds.json && rm -f "$TMP"
+sudo docker compose exec -T n8n sh -c 'rm -rf /tmp/workflows'
 sudo docker cp n8n/workflows "$C":/tmp/workflows
 sudo docker compose exec -T n8n n8n unpublish:workflow --id=unabChatPrincip1 >/dev/null 2>&1 || true
 sudo docker compose exec -T n8n n8n import:credentials --input=/tmp/creds.json
