@@ -193,6 +193,10 @@ Conectar **Claude Desktop** al servidor:
 
 **Memoria persistente**: nodo *Postgres Chat Memory* en Supabase, con sesión = ID del estudiante y ventana de 10 turnos. Permite preguntas de seguimiento ("¿y cuántos cursos puedo matricular entonces?").
 
+Tabla `n8n_chat_histories` en Supabase con las conversaciones guardadas (mensajes del estudiante, respuestas y llamadas a herramientas MCP):
+
+![Memoria en Supabase](docs/capturas/supabase_02_memoria_chat.png)
+
 ## 9. Scraper de noticias
 
 Fuente: API pública `unab.edu.co/wp-json/wp/v2/posts`, categorías Estudiantes (232), Ingeniería de Sistemas (556) y Facultad de Ingeniería (134). Etiqueta cada noticia como `CCD`, `CERTIFICACION`, `CONVOCATORIA`, `CURSOS` o `GENERAL`. Se ejecuta en n8n cada 6 horas; `mcp_server/scraper.py` es la versión en Python, con respaldo de scraping HTML.
@@ -203,7 +207,15 @@ Fuente: API pública `unab.edu.co/wp-json/wp/v2/posts`, categorías Estudiantes 
 - **APK**: abrir `android/` en Android Studio, cambiar `APP_URL` en `app/build.gradle.kts` → *Build APK(s)*.
 - Login con **nombre completo + ID (U00XXXXXX) + carrera**, validado contra la base de datos.
 
-| Login | Login rechazado | Sesión iniciada |
+**En un celular Android real** (PWA instalada desde Chrome):
+
+| Ícono instalado | Login | Sesión iniciada | Preguntas frecuentes |
+|---|---|---|---|
+| ![](docs/capturas/movil_01_icono_instalado.jpg) | ![](docs/capturas/movil_02_login.jpg) | ![](docs/capturas/movil_03_sesion_iniciada.jpg) | ![](docs/capturas/movil_04_preguntas_frecuentes.jpg) |
+
+**Validación del login** (entorno de pruebas):
+
+| Login | Login rechazado (nombre no coincide) | Sesión iniciada |
 |---|---|---|
 | ![](docs/capturas/app_01_login.png) | ![](docs/capturas/app_02_login_rechazado.png) | ![](docs/capturas/app_03_sesion_iniciada.png) |
 
