@@ -8,7 +8,7 @@ Chatbot híbrido **RAG + agentes MCP** orquestado en **n8n** para estudiantes de
 | Componente | Tecnología | Dónde corre |
 |---|---|---|
 | Orquestación, workflows, agente | **n8n 2.47** (self-hosted) | AWS EC2 · Docker |
-| LLM | **Claude Sonnet 5.5** (agente) y **Claude Haiku 5.5** (ruteo/guardrail) | API de Anthropic |
+| LLM | **Claude Haiku 5.5** sin *thinking* (agente, ruteo y guardrail) | API de Anthropic |
 | Base de datos relacional + vectores | **PostgreSQL + pgvector** | Supabase |
 | Servidor MCP | **Python · FastMCP 4.2** (HTTP streamable, puerto 9000) | AWS EC2 · Docker |
 | Embeddings | `paraphrase-multilingual-MiniLM-L12-v2` (384 d, local, sin API key) | Dentro del servidor MCP |
@@ -49,14 +49,14 @@ flowchart LR
         A -->|/auth| M["Servidor MCP FastMCP :9000<br/>10 herramientas · /embed · /rag/search"]
         N -->|MCP HTTP streamable| M
     end
-    N -->|LLM| CL["Claude API<br/>Sonnet 5.5 · Haiku 5.5"]
+    N -->|LLM| CL["Claude API<br/>Haiku 5.5"]
     N -->|CSV| GS["Google Sheet<br/>calendario"]
     N -->|scraping 6 h| UN["unab.edu.co<br/>wp-json"]
     M -->|SQL + pgvector| SB[("Supabase<br/>PostgreSQL + pgvector")]
     N -->|memoria + log| SB
 ```
 
-**Flujo de una consulta:** la app envía el mensaje a n8n → guardrails de entrada (reglas + nodo nativo Guardrails) → glosario de jerga estudiantil → **ruteo por intención** con Claude Haiku → la ruta trae contexto (búsqueda híbrida en pgvector, Google Sheet, vistas del estudiante o noticias) → **agente Claude Sonnet** con **memoria persistente** y **herramientas MCP** → guardrail de salida → registro en `chat_log` → respuesta.
+**Flujo de una consulta:** la app envía el mensaje a n8n → guardrails de entrada (reglas + nodo nativo Guardrails) → glosario de jerga estudiantil → **ruteo por intención** con Claude Haiku → la ruta trae contexto (búsqueda híbrida en pgvector, Google Sheet, vistas del estudiante o noticias) → **agente Claude Haiku** con **memoria persistente** y **herramientas MCP** → guardrail de salida → registro en `chat_log` → respuesta.
 
 URLs del despliegue: `https://app.3-222-163-239.sslip.io` (app) · `https://n8n.3-222-163-239.sslip.io` (n8n) · `http://3.222.163.239:9000/mcp` (MCP).
 
@@ -264,7 +264,7 @@ Abrir `https://n8n.<ip>.sslip.io` y crear el usuario dueño (queda en el servido
 
 ## 12. Pruebas realizadas
 
-Pruebas contra el despliegue real (Claude Sonnet/Haiku 5.5) con 10 estudiantes sintéticos distintos:
+Pruebas contra el despliegue real con 10 estudiantes sintéticos distintos (primera ronda con Sonnet 5.5 como agente):
 
 | Estudiante (perfil) | Pregunta | Ruta | Resultado |
 |---|---|---|---|
@@ -314,6 +314,7 @@ Carrera: **Ingeniería de Sistemas**.
 | Necesidad | Comando (en la EC2) |
 |---|---|
 | Aplicar la última versión del repositorio | `bash deploy/actualizar.sh` |
+| Borrar la memoria de conversaciones | `bash deploy/limpiar_memoria.sh` |
 | Ver el error de la última ejecución de n8n | `sudo python3 deploy/ultimo_error.py 1` |
 | Ver qué versión del workflow está publicada | `sudo python3 deploy/n8n_versiones.py` |
 | Estado de los contenedores | `sudo docker compose ps` |
@@ -326,6 +327,7 @@ Carrera: **Ingeniería de Sistemas**.
 - Estudiantes, notas, pagos y prerrequisitos son **sintéticos**; el plan de estudios, el Reglamento y la información del CCD son reales.
 - Parte del calendario 2027-1 es sintética; cada fila indica su fuente.
 - Cuando la pregunta llega en otro idioma, el agente a veces responde en español.
+- **Por qué el agente usa Haiku 5.5 y no Sonnet 5.5:** Sonnet 5.5 siempre genera bloques de *thinking* firmados y ligados al *system prompt*. La memoria de n8n los guarda, y al cambiar las instrucciones Anthropic rechaza el historial (`Invalid signature in thinking block`). Haiku 5.5 permite desactivar el *thinking*, así que la memoria solo guarda texto; además cuesta varias veces menos.
 
 **Fuentes**
 - [Reglamento Estudiantil de Pregrado UNAB (2019)](https://unab.edu.co/NewFolder/Reglamento-estudiantil-pregraod.pdf)

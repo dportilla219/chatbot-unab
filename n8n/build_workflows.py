@@ -16,7 +16,7 @@ OUT.mkdir(exist_ok=True)
 PG = {"postgres": {"id": "supabaseUnab01", "name": "Supabase UNAB"}}
 ANT = {"anthropicApi": {"id": "anthropicUnab01", "name": "Anthropic Claude"}}
 MCP_URL = "http://mcp:9000"
-MODELO_AGENTE = "claude-sonnet-5-5"
+MODELO_AGENTE = "claude-haiku-5-5"  # sin thinking: la memoria guarda solo texto (Sonnet 5.5 no permite desactivarlo)
 MODELO_RAPIDO = "claude-haiku-5-5"
 
 
@@ -263,7 +263,7 @@ w.add("Asistente UNAB (Agente)", "@n8n/n8n-nodes-langchain.agent", 3,
                "Contexto recuperado:\n{{ $json.contexto }}\n\nJerga detectada en la pregunta: {{ $('Normalizar entrada').item.json.glosario || 'ninguna' }}\n\nPregunta del estudiante (tal como la escribió): {{ $('Normalizar entrada').item.json.mensaje }}",
        "options": {"systemMessage": "=" + SYSTEM, "maxIterations": 8}},
       [1300, 120])
-anthropic(w, "Claude (agente)", MODELO_AGENTE, [1200, 420], 0.3)
+anthropic(w, "Claude (agente)", MODELO_AGENTE, [1200, 420], 0.3, no_thinking=True)
 w.add("Memoria persistente (Postgres)", "@n8n/n8n-nodes-langchain.memoryPostgresChat", 1.3,
       {"sessionIdType": "customKey", "sessionKey": "={{ $('Normalizar entrada').item.json.sessionId }}",
        "tableName": "n8n_chat_histories", "contextWindowLength": 10}, [1360, 420], PG)
