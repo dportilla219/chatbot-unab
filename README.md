@@ -158,6 +158,10 @@ Ejecución exitosa del workflow principal:
 
 ![Ejecución](docs/capturas/n8n_04_ejecucion_exitosa.png)
 
+Ejecuciones reales en el servidor de AWS (n8n 2.47.7 en EC2). Cada pregunta desde el celular queda registrada y en verde el recorrido por los nodos:
+
+![Ejecuciones en el servidor](docs/capturas/n8n_05_ejecucion_real.png)
+
 ## 7. Servidor MCP (FastMCP)
 
 `mcp_server/server.py` · HTTP streamable en `:9000/mcp`.
