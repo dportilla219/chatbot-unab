@@ -12,7 +12,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         // URL de la app Gradio desplegada en EC2 (cámbiala por la tuya)
-        buildConfigField("String", "APP_URL", "\"https://app.CAMBIA-IP.sslip.io\"")
+        buildConfigField("String", "APP_URL", "\"https://app.3-222-163-239.sslip.io\"")
     }
     buildFeatures { buildConfig = true }
     buildTypes { release { isMinifyEnabled = false } }

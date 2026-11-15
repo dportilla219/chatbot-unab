@@ -112,7 +112,8 @@ def _pendientes(sid: str) -> dict:
 @mcp.tool
 def proyeccion_y_recomendaciones(id_estudiante: str) -> dict:
     """Proyección de semestres restantes, alertas de requisitos pendientes (inglés B2, competencias
-    digitales, PGA de grado, estado académico) y propuesta de cursos para el próximo periodo."""
+    digitales, PGA de grado, estado académico), propuesta de cursos para el próximo periodo y
+    recomendaciones para el éxito académico en tres ejes: investigación, autoaprendizaje y educación de precisión."""
     sid = _check_id(id_estudiante)
     proy = db.fetch_one("SELECT * FROM v_proyeccion_grado WHERE id_estudiante=%s", (sid,))
     pend = _pendientes(sid)
@@ -152,7 +153,50 @@ def proyeccion_y_recomendaciones(id_estudiante: str) -> dict:
         recs.append("Vas en camino a una distinción de grado (Cum Laude desde PGA 4.25, sin cursos reprobados ni repetidos, Art. 89).")
     return {"proyeccion": proy, "propuesta_proximo_periodo": {"creditos": cred, "cursos": plan,
             "limite_aplicado": f"{max_cursos} cursos / {max_cred if max_cred < 99 else 'sin tope'} créditos por estado {estado}"},
-            "recomendaciones_personalizadas": recs, "areas_con_dificultad": dificiles}
+            "recomendaciones_personalizadas": recs, "areas_con_dificultad": dificiles,
+            "recomendaciones_exito": _recomendaciones_exito(sid, proy, dificiles, plan)}
+
+
+def _recomendaciones_exito(sid: str, proy: dict, dificiles: list, plan: list) -> dict:
+    """Recomendaciones en los tres ejes del objetivo del proyecto: investigación, autoaprendizaje y
+    educación de precisión (decisiones basadas en los datos del propio estudiante)."""
+    areas = db.fetch_all("""SELECT a.area, ROUND(AVG(m.nota_final)::numeric, 2) AS promedio, COUNT(*) AS cursos
+                            FROM v_mejor_nota m JOIN asignatura a USING (cod_asignatura)
+                            WHERE m.id_estudiante=%s AND m.nota_final IS NOT NULL
+                            GROUP BY a.area ORDER BY promedio DESC""", (sid,))
+    pga = float(proy["pga"] or 0); sem = proy["semestre_actual"] or 1
+    fuerte = areas[0] if areas else None
+    debil = areas[-1] if len(areas) > 1 else None
+    inv = []
+    if pga >= 3.8 and sem >= 3:
+        inv.append("Tu rendimiento te permite postularte a un semillero de investigación de la Facultad de Ingeniería; pregunta a tu director por los grupos activos y sus convocatorias.")
+    elif sem >= 3:
+        inv.append("Antes de entrar a un semillero, estabiliza tu PGA por encima de 3.5; mientras tanto asiste a charlas y eventos de investigación de la facultad.")
+    else:
+        inv.append("En los primeros semestres explora líneas de investigación del programa (eventos, ferias de proyectos) para elegir un tema con tiempo.")
+    if fuerte:
+        inv.append(f"Tu área más fuerte es '{fuerte['area']}' (promedio {fuerte['promedio']}): es una buena candidata para tu proyecto de grado o un trabajo de investigación.")
+    if sem >= 6:
+        inv.append("Ya puedes perfilar tu opción de grado: un proyecto aplicado o de investigación se planea mejor uno o dos semestres antes de la práctica.")
+    auto = []
+    if proy["ccd_rutas_pendientes"]:
+        auto.append(f"Tienes {proy['ccd_rutas_pendientes']} ruta(s) de Competencias Digitales pendientes: los cursos del CCD son virtuales y se pueden avanzar a tu ritmo, incluso en vacaciones.")
+    if not proy["ingles_cumplido"]:
+        auto.append(f"Inglés {proy['nivel_ingles']} → B2: dedica de 3 a 5 horas semanales de práctica autónoma (lectura técnica, escucha, plataformas de la biblioteca) además de los cursos.")
+    if debil:
+        auto.append(f"Refuerza '{debil['area']}' (tu promedio más bajo, {debil['promedio']}) con ejercicios y cursos abiertos antes de los cursos que la necesitan.")
+    auto.append("Lleva un registro semanal de tus horas de estudio por materia; la regla de oro es 2 horas autónomas por cada crédito presencial.")
+    prec = []
+    if debil and fuerte:
+        prec.append(f"Diferencia entre tu mejor área ({fuerte['area']}, {fuerte['promedio']}) y la más baja ({debil['area']}, {debil['promedio']}): prioriza asesorías en la segunda (Art. 82).")
+    if dificiles:
+        prec.append(f"Concentraste {dificiles[0]['reprobadas']} reprobación(es) en '{dificiles[0]['area']}'; no matricules juntos dos cursos de esa área en el mismo periodo.")
+    if plan:
+        prec.append("Cursos recomendados para tu próximo periodo según prerrequisitos y límite de carga: " + ", ".join(c["asignatura"] for c in plan) + ".")
+    falta = 3.20 - pga
+    if 0 < falta:
+        prec.append(f"Te faltan {falta:.2f} puntos de PGA para el mínimo de grado (3.20, Art. 67).")
+    return {"investigacion": inv, "autoaprendizaje": auto, "educacion_de_precision": prec, "promedio_por_area": areas}
 
 
 @mcp.tool
