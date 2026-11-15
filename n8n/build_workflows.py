@@ -160,7 +160,7 @@ return [{ json: { respuesta: `🛡️ ${motivo}\n\nPuedo ayudarte con tu matríc
 """, [700, -760])
 
 w.add("Ruteo por intención", "@n8n/n8n-nodes-langchain.textClassifier", 1.1,
-      {"inputText": "={{ $('Normalizar entrada').item.json.mensaje_busqueda }}",
+      {"inputText": "={{ $('Unir seguimiento').item.json.mensaje_busqueda }}",
        "categories": {"categories": [
            {"category": "consulta_general", "description": "Preguntas sobre normas, Reglamento Estudiantil, plan de estudios en general, qué es la insignia o las competencias digitales, homologaciones, grados, requisitos, procedimientos de la UNAB."},
            {"category": "calendario", "description": "Fechas: inscripciones, pruebas diagnósticas, inicio o fin de clases, pagos de matrícula, cursos vacacionales, cancelaciones, grados."},
@@ -177,7 +177,7 @@ anthropic(w, "Claude rápido (clasificador)", MODELO_RAPIDO, [380, 440], 0, no_t
 w.note("### 01 Consulta general\nPregunta → búsqueda RAG (pgvector) → LLM → respuesta", [660, -535], 460, 95, 6)
 w.add("01 Búsqueda RAG (pgvector)", "n8n-nodes-base.httpRequest", 4.2,
       {"method": "POST", "url": f"{MCP_URL}/rag/search", "sendBody": True, "specifyBody": "json",
-       "jsonBody": "={{ JSON.stringify({ query: $('Normalizar entrada').item.json.mensaje_busqueda, k: 8 }) }}", "options": {"timeout": 30000}},
+       "jsonBody": "={{ JSON.stringify({ query: $('Unir seguimiento').item.json.mensaje_busqueda, k: 8 }) }}", "options": {"timeout": 30000}},
       [700, -420], onError="continueRegularOutput")
 code(w, "01 Contexto RAG", r"""
 const r = $input.first().json.resultados || [];
@@ -254,6 +254,9 @@ Reglas:
 - No inventes notas, fechas ni normas. Los datos de estudiantes son sintéticos (simulan Banner/COSMOS).
 - Cuando sea útil, cierra con 1-3 recomendaciones accionables (asesoría académica, Bienestar, rutas de competencias digitales, inglés B2, carga de créditos).
 - Cuando el estudiante pida recomendaciones, consejos o cómo tener éxito, usa proyeccion_y_recomendaciones y organiza la respuesta en los tres ejes del programa: **Investigación**, **Autoaprendizaje** y **Educación de precisión** (basada en sus propios datos).
+- Si el mensaje es continuación del anterior (por ejemplo 'es para un amigo', '¿y cómo lo hago?'), retoma ESE tema y responde la pregunta anterior aplicada al nuevo caso. Nunca respondas algo genérico sin relación.
+- Si pregunta por otra persona (un amigo, un compañero): no des ni busques datos personales de nadie más, pero sí explica el procedimiento general (requisitos, dónde consultar, cómo matricular, a quién escribir) para que esa persona lo haga con su propio usuario.
+- Responde SIEMPRE la parte general de la pregunta (dónde consultar, cómo hacer un trámite, a quién escribir) aunque los datos personales digan que el estudiante ya cumplió; primero el dato personal en una línea y luego el procedimiento.
 - Memoria persistente: el historial de esta conversación contiene los mensajes anteriores de ESTE estudiante, también de sesiones pasadas (aunque haya cerrado sesión o recargado la app). En cada mensaje anterior, lo que el estudiante escribió aparece después de 'Pregunta del estudiante (tal como la escribió):'. Úsalo para preguntas de seguimiento ('¿y cuál de esos?') y cuando pregunte qué te consultó antes. Nunca digas que no tienes acceso a conversaciones anteriores ni que cada mensaje es independiente.
 - Herramientas MCP disponibles: estado_academico, historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales, plan_de_estudios, buscar_reglamento_y_documentos, calendario_academico, noticias_recientes.
 Fecha de hoy: {{ $('Normalizar entrada').item.json.fecha_hoy }}."""
@@ -262,7 +265,7 @@ w.add("Asistente UNAB (Agente)", "@n8n/n8n-nodes-langchain.agent", 3,
       {"promptType": "define",
        "text": "=Estudiante: {{ $('Normalizar entrada').item.json.nombre }} ({{ $('Normalizar entrada').item.json.id_estudiante }}) - {{ $('Normalizar entrada').item.json.programa }}\n"
                "Intención detectada: {{ $json.intencion }}\n\nInstrucción para esta ruta: {{ $json.instruccion }}\n\n"
-               "Contexto recuperado:\n{{ $json.contexto }}\n\nJerga detectada en la pregunta: {{ $('Normalizar entrada').item.json.glosario || 'ninguna' }}\n\nPregunta del estudiante (tal como la escribió): {{ $('Normalizar entrada').item.json.mensaje }}",
+               "Contexto recuperado:\n{{ $json.contexto }}\n\nJerga detectada en la pregunta: {{ $('Normalizar entrada').item.json.glosario || 'ninguna' }}{{ $('Unir seguimiento').item.json.seguimiento ? '\\n\\nEste mensaje es continuación del anterior. Pregunta anterior: ' + $('Unir seguimiento').item.json.pregunta_anterior + '\\nInicio de tu respuesta anterior: ' + $('Unir seguimiento').item.json.respuesta_anterior : '' }}\n\nPregunta del estudiante (tal como la escribió): {{ $('Normalizar entrada').item.json.mensaje }}",
        "options": {"systemMessage": "=" + SYSTEM, "maxIterations": 8}},
       [1300, 120])
 anthropic(w, "Claude (agente)", MODELO_AGENTE, [1200, 420], 0.3, no_thinking=True)
@@ -300,11 +303,32 @@ w.add("Responder", "n8n-nodes-base.respondToWebhook", 1.1,
 code(w, "Respuesta final", "return [{ json: $input.first().json }];", [1870, 120])
 
 # conexiones
+pg_query(w, "Pregunta anterior (chat_log)", """
+SELECT pregunta, left(respuesta, 700) AS respuesta
+FROM academico.chat_log
+WHERE id_estudiante = $1 AND bloqueado = false AND creado > now() - interval '3 hours'
+ORDER BY id DESC LIMIT 1;
+""", [200, 420], replacement="={{ $('Normalizar entrada').item.json.id_estudiante }}", always=True)
+code(w, "Unir seguimiento", r"""
+// Si el mensaje depende del anterior ("es para un amigo", "¿y cuál de esos?", "y cómo lo hago"),
+// se une con la pregunta previa para que el clasificador y el RAG entiendan el tema.
+const n = $('Normalizar entrada').first().json;
+const prev = $input.first().json || {};
+const m = (n.mensaje || '').trim();
+const palabras = m.split(/\s+/).filter(Boolean).length;
+const marcas = /^(y|e|o|pero|entonces|osea|o sea|tambi[eé]n|igual|ok|vale|bueno|ah|y si|y para|y c[oó]mo|y d[oó]nde|y cu[aá]l|y qu[eé]|es para|para un|para una|lo mismo|eso|esos|esas|ese|esa)\b|\b(eso|esos|esas|ese|esa|lo anterior|lo mismo|un amig[oa]|mi amig[oa]|un compa[ñn]er[oa]|otra persona|de ellos|de esos)\b/i;
+const seguimiento = !!prev.pregunta && (palabras <= 6 || marcas.test(m));
+const mensaje_busqueda = seguimiento ? `${prev.pregunta} → ${n.mensaje_busqueda}` : n.mensaje_busqueda;
+return [{ json: { ...n, seguimiento, pregunta_anterior: seguimiento ? prev.pregunta : '',
+                  respuesta_anterior: seguimiento ? (prev.respuesta || '') : '', mensaje_busqueda } }];
+""", [400, 420])
 w.link("Webhook chat", "Normalizar entrada")
 w.link("Normalizar entrada", "¿Bloqueado por reglas?")
 w.link("¿Bloqueado por reglas?", "Respuesta bloqueada", 0)
 w.link("¿Bloqueado por reglas?", "Guardrails (PII + palabras clave)", 1)
-w.link("Guardrails (PII + palabras clave)", "Ruteo por intención", 0)
+w.link("Guardrails (PII + palabras clave)", "Pregunta anterior (chat_log)", 0)
+w.link("Pregunta anterior (chat_log)", "Unir seguimiento")
+w.link("Unir seguimiento", "Ruteo por intención")
 w.link("Guardrails (PII + palabras clave)", "Respuesta bloqueada", 1)
 w.link("Claude rápido (clasificador)", "Ruteo por intención", kind="ai_languageModel")
 w.link("Ruteo por intención", "01 Búsqueda RAG (pgvector)", 0)
