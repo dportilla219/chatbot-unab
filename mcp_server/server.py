@@ -277,7 +277,7 @@ async def historial_route(request: Request):
     if not a.get("ok"):
         return JSONResponse({"ok": False, "mensajes": []})
     n = max(1, min(int(b.get("limite", 10)), 30))
-    rows = db.fetch_all("""SELECT pregunta, respuesta, intencion, to_char(creado, 'YYYY-MM-DD HH24:MI') AS fecha
+    rows = db.fetch_all("""SELECT pregunta, respuesta, intencion, to_char((creado AT TIME ZONE 'UTC') AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD HH24:MI') AS fecha
                            FROM chat_log WHERE id_estudiante = %s AND respuesta IS NOT NULL
                            ORDER BY id DESC LIMIT %s""", (a["estudiante"]["id_estudiante"], n))
     return JSONResponse({"ok": True, "mensajes": list(reversed(rows))})
