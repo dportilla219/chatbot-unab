@@ -213,6 +213,16 @@ Fuente: API pública `unab.edu.co/wp-json/wp/v2/posts`, categorías Estudiantes 
 |---|---|---|---|
 | ![](docs/capturas/movil_01_icono_instalado.jpg) | ![](docs/capturas/movil_02_login.jpg) | ![](docs/capturas/movil_03_sesion_iniciada.jpg) | ![](docs/capturas/movil_04_preguntas_frecuentes.jpg) |
 
+**Conversaciones reales en el celular** (EC2 + Supabase + Claude):
+
+| RAG: reglamento (Valentina) | Memoria: pregunta de seguimiento | Calendario (Google Sheets) | Proyección y recomendaciones (Andrés, condicional) |
+|---|---|---|---|
+| ![](docs/capturas/movil_05_rag_reglamento.jpg) | ![](docs/capturas/movil_06_memoria.jpg) | ![](docs/capturas/movil_07_calendario.jpg) | ![](docs/capturas/movil_08_recomendaciones.jpg) |
+
+| Jerga estudiantil ("PFU") | Historial personal de notas | Guardrail: datos de otro estudiante |
+|---|---|---|
+| ![](docs/capturas/movil_09_jerga_pfu.jpg) | ![](docs/capturas/movil_11_historial_notas.jpg) | ![](docs/capturas/movil_10_guardrail.jpg) |
+
 **Validación del login** (entorno de pruebas):
 
 | Login | Login rechazado (nombre no coincide) | Sesión iniciada |
