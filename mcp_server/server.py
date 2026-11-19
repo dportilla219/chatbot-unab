@@ -26,6 +26,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 import db
+import glosario
 import scraper
 from embeddings import embed, to_pgvector
 
@@ -298,6 +299,7 @@ def autenticar(nombre_completo: str, id_estudiante: str, programa: str) -> dict:
 
 
 def rag_search(pregunta: str, k: int = 5, fuente: str | None = None) -> list[dict]:
+    pregunta = glosario.expandir(pregunta)  # jerga estudiantil -> términos del Reglamento
     v = to_pgvector(embed([pregunta])[0])
     rows = db.fetch_all("SELECT * FROM buscar_hibrido(%s::vector, %s, %s, %s)", (v, pregunta, min(k, 10), fuente))
     return [{**r, "similitud": round(r["similitud"], 3)} for r in rows]
@@ -688,7 +690,7 @@ async def evidencias(_: Request):
     rag = []
     for q in CONSULTAS_RAG_DEMO:
         res = rag_search(q, 3)
-        rag.append({"consulta": q, "resultados": [{"fuente": r.get("fuente"), "titulo": r.get("titulo"),
+        rag.append({"consulta": q, "consulta_expandida": glosario.expandir(q), "resultados": [{"fuente": r.get("fuente"), "titulo": r.get("titulo"),
                                                    "similitud": r.get("similitud"),
                                                    "fragmento": (r.get("contenido") or "")[:220]} for r in res]})
     chunks = db.fetch_all("""SELECT fuente, COUNT(*) AS fragmentos, ROUND(AVG(length(contenido))) AS caracteres_promedio,
@@ -699,6 +701,7 @@ async def evidencias(_: Request):
         "tablas": tablas, "vistas": vistas_bd, "herramientas_mcp": herramientas,
         "ejemplo_herramienta": {"llamada": f"estado_academico('{DEMO_ID}')", "respuesta": estado_academico(DEMO_ID)},
         "rag": {"modelo": "paraphrase-multilingual-MiniLM-L12-v2 (384 dimensiones)", "chunk_max": 600, "overlap": 120,
+                "puntaje": "fusión RRF: suma de 1/(60 + posición) en la lista vectorial y en la de texto completo",
                 "fragmentos_por_fuente": chunks, "consultas": rag},
     }, default=str))
     _EVID_CACHE.update(t=time.time(), data=data)

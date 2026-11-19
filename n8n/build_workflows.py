@@ -122,7 +122,7 @@ const GLOSARIO = [
   [/\ben\s*prueba\b|prueba\s*acad/i, 'prueba académica, Programa de Recuperación Académica'],
   [/pasant[ií]a|\bpr[aá]ctica(s)?\b/i, 'práctica profesional o práctica académica'],
   [/fallas|faltas|inasistencia|no\s*ir\s*a\s*clase/i, 'fallas por inasistencia (20 %)'],
-  [/cart[oó]n|diploma|graduarme|graduaci[oó]n|\bgrado\b/i, 'requisitos de grado (Art. 67)'],
+  [/cart[oó]n|diploma|graduar\w*|graduaci[oó]n|\bgrado\b/i, 'requisitos de grado (Art. 67)'],
   [/\binfo\b|inform[aá]tica|compu|ofim[aá]tica|excel|word/i, 'competencias digitales (antes cursos de informática), rutas del CCD'],
   [/homolog|convalid|reconoc\w*\s*(materia|curso)/i, 'homologación o reconocimiento de cursos'],
   [/doble\s*(titulaci[oó]n|programa|carrera)|segunda\s*carrera/i, 'segundo programa académico (30 % de créditos y PGA 3.50)'],
