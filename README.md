@@ -71,7 +71,7 @@ URLs del despliegue: `https://app.3-222-163-239.sslip.io` (app) · `https://n8n.
 | Scraper de noticias | Workflow `04_scraper_noticias.json` + `mcp_server/scraper.py` | ✅ |
 | Aplicación Android | `app/` (Gradio, instalable como PWA) + `android/` (WebView Kotlin). **APK compilado automáticamente con GitHub Actions** → [Releases](https://github.com/dportilla219/chatbot-unab/releases) | ✅ |
 | Documentación técnica | Este README + documento técnico + `docs/guion_video_demo.md` | ✅ |
-| Video demostración | [`docs/video_demo_chatbot_unab.mp4`](docs/video_demo_chatbot_unab.mp4) (4 min 21 s, narrado por el autor) · guion en `docs/guion_video_demo.md` | ✅ |
+| Video demostración | [`docs/video_demo_chatbot_unab.mp4`](docs/video_demo_chatbot_unab.mp4) (4 min 32 s, narrado por el autor) · guion en `docs/guion_video_demo.md` | ✅ |
 
 | Requisito técnico | Implementación |
 |---|---|
