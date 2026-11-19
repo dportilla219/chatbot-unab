@@ -659,6 +659,52 @@ async def rag_route(request: Request):
     return JSONResponse({"resultados": rag_search(b.get("query", ""), int(b.get("k", 5)), b.get("fuente"))})
 
 
+# ----------------------------------------------------------------- evidencias públicas (sin costo de LLM)
+_EVID_CACHE: dict = {}
+CONSULTAS_RAG_DEMO = [
+    "¿Qué pasa si quedo en prueba académica?",
+    "¿Cuántas fallas puedo tener antes de perder una materia?",
+    "requisitos para graduarse de ingeniería de sistemas",
+    "¿Qué es la insignia de competencias digitales?",
+    "que formas hay de quedar PFU",
+]
+
+
+@mcp.custom_route("/evidencias", methods=["GET"])
+async def evidencias(_: Request):
+    """Evidencia de funcionamiento para la documentación: tablas con datos, herramientas MCP, una llamada de
+    ejemplo al estudiante de prueba (datos sintéticos) y recuperación RAG de consultas fijas. Sin LLM; caché 10 min."""
+    import time
+    if _EVID_CACHE.get("t", 0) > time.time() - 600:
+        return JSONResponse(_EVID_CACHE["data"])
+    nombres = [r["t"] for r in db.fetch_all("""SELECT table_name AS t FROM information_schema.tables
+                                                WHERE table_schema='academico' AND table_type='BASE TABLE' ORDER BY 1""")]
+    tablas = [{"tabla": n, "filas": db.fetch_one(f'SELECT COUNT(*) AS c FROM academico."{n}"')["c"]} for n in nombres]
+    vistas_bd = [r["t"] for r in db.fetch_all("""SELECT table_name AS t FROM information_schema.views
+                                                 WHERE table_schema='academico' ORDER BY 1""")]
+    herramientas = []
+    for t in await mcp.list_tools():
+        herramientas.append({"nombre": t.name, "descripcion": (t.description or "").split("\n")[0]})
+    rag = []
+    for q in CONSULTAS_RAG_DEMO:
+        res = rag_search(q, 3)
+        rag.append({"consulta": q, "resultados": [{"fuente": r.get("fuente"), "titulo": r.get("titulo"),
+                                                   "similitud": r.get("similitud"),
+                                                   "fragmento": (r.get("contenido") or "")[:220]} for r in res]})
+    chunks = db.fetch_all("""SELECT fuente, COUNT(*) AS fragmentos, ROUND(AVG(length(contenido))) AS caracteres_promedio,
+                                    MAX(length(contenido)) AS caracteres_max
+                             FROM documento_chunk GROUP BY fuente ORDER BY 2 DESC""")
+    data = json.loads(json.dumps({
+        "generado": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+        "tablas": tablas, "vistas": vistas_bd, "herramientas_mcp": herramientas,
+        "ejemplo_herramienta": {"llamada": f"estado_academico('{DEMO_ID}')", "respuesta": estado_academico(DEMO_ID)},
+        "rag": {"modelo": "paraphrase-multilingual-MiniLM-L12-v2 (384 dimensiones)", "chunk_max": 600, "overlap": 120,
+                "fragmentos_por_fuente": chunks, "consultas": rag},
+    }, default=str))
+    _EVID_CACHE.update(t=time.time(), data=data)
+    return JSONResponse(data)
+
+
 @mcp.custom_route("/scrape", methods=["POST"])
 async def scrape_route(request: Request):
     if not _authorized(request):

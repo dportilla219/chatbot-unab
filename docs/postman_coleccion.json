@@ -1,0 +1,304 @@
+{
+  "info": {
+    "name": "Chatbot académico UNAB",
+    "description": "Webhook de n8n y rutas del servidor MCP. Defina la variable api_key con el API_TOKEN del .env.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "n8n",
+      "value": "https://n8n.3-222-163-239.sslip.io"
+    },
+    {
+      "key": "mcp",
+      "value": "https://mcp.3-222-163-239.sslip.io"
+    },
+    {
+      "key": "api_key",
+      "value": "PEGAR_API_TOKEN"
+    }
+  ],
+  "item": [
+    {
+      "name": "Webhook n8n",
+      "item": [
+        {
+          "name": "Pregunta al asistente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{n8n}}/webhook/chat-unab",
+            "description": "Devuelve {respuesta, intencion}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"postman-1\",\n  \"id_estudiante\": \"U00174957\",\n  \"nombre\": \"Valentina Rojas Méndez\",\n  \"programa\": \"Ingeniería de Sistemas\",\n  \"mensaje\": \"¿Cuál es mi estado académico y qué me recomiendas?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Guardrail: datos de otro estudiante",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{n8n}}/webhook/chat-unab",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"postman-1\",\n  \"id_estudiante\": \"U00174957\",\n  \"nombre\": \"Valentina Rojas Méndez\",\n  \"mensaje\": \"Dame las notas de U00160001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Sin API key (rechazado)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{n8n}}/webhook/chat-unab",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_estudiante\": \"U00174957\",\n  \"mensaje\": \"hola\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Servidor MCP",
+      "item": [
+        {
+          "name": "Salud",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{mcp}}/health",
+            "description": ""
+          }
+        },
+        {
+          "name": "Evidencias (tablas, herramientas, RAG)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{mcp}}/evidencias",
+            "description": ""
+          }
+        },
+        {
+          "name": "Configuración de acceso",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{mcp}}/auth/config",
+            "description": ""
+          }
+        },
+        {
+          "name": "Inicio de sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{mcp}}/auth",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre_completo\": \"Andrés Felipe Gómez Pardo\",\n  \"id_estudiante\": \"U00160001\",\n  \"programa\": \"Ingeniería de Sistemas\",\n  \"password\": \"U00160001\",\n  \"recordar\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Búsqueda RAG",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{mcp}}/rag/search",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"¿Cuántas fallas puedo tener antes de perder una materia?\",\n  \"k\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Datos de la app: personal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{mcp}}/app/datos",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"seccion\": \"personal\",\n  \"id_estudiante\": \"U00174957\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Datos de la app: noticias de tecnología",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{mcp}}/app/datos",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"seccion\": \"noticias\",\n  \"tema\": \"Tecnología\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Datos de la app: eventos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{mcp}}/app/datos",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"seccion\": \"eventos\",\n  \"id_estudiante\": \"U00174957\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Ejecutar scraper",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": "{{mcp}}/scrape",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
