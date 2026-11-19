@@ -30,11 +30,13 @@ Chatbot híbrido **RAG + agentes MCP** orquestado en **n8n** para estudiantes de
 8. [Guardrails y memoria](#8-guardrails-y-memoria)
 9. [Scraper de noticias](#9-scraper-de-noticias)
 10. [Aplicación Android (Gradio)](#10-aplicación-android-gradio)
-11. [Despliegue paso a paso en AWS](#11-despliegue-paso-a-paso-en-aws)
-12. [Pruebas realizadas](#12-pruebas-realizadas)
-13. [Usuarios de demostración](#13-usuarios-de-demostración)
-14. [Mantenimiento y diagnóstico](#14-mantenimiento-y-diagnóstico)
-15. [Limitaciones y fuentes](#15-limitaciones-y-fuentes)
+11. [Manual de usuario](#11-manual-de-usuario)
+12. [Pertinencia pedagógica](#12-pertinencia-pedagógica)
+13. [Despliegue paso a paso en AWS](#13-despliegue-paso-a-paso-en-aws)
+14. [Pruebas realizadas](#14-pruebas-realizadas)
+15. [Usuarios de demostración](#15-usuarios-de-demostración)
+16. [Mantenimiento y diagnóstico](#16-mantenimiento-y-diagnóstico)
+17. [Limitaciones y fuentes](#17-limitaciones-y-fuentes)
 
 ---
 
@@ -42,25 +44,75 @@ Chatbot híbrido **RAG + agentes MCP** orquestado en **n8n** para estudiantes de
 
 ```mermaid
 flowchart LR
-    E["📱 Estudiante<br/>App Android (PWA Gradio / WebView)"] -->|HTTPS| C
-    subgraph EC2["AWS EC2 · Ubuntu 24.04 · Docker Compose"]
-        C["Caddy<br/>HTTPS sslip.io"] --> A["App Gradio<br/>login + chat"]
-        A -->|POST /webhook/chat-unab| N["n8n<br/>Guardrails → Ruteo por intención<br/>01 RAG · 02 Calendario · 03 Historial · 04 Noticias<br/>Agente Claude + memoria"]
-        A -->|/auth| M["Servidor MCP FastMCP :9000<br/>10 herramientas · /embed · /rag/search"]
-        N -->|MCP HTTP streamable| M
+    U["Estudiante<br/>App Android<br/>(APK WebView / PWA)"] -->|HTTPS| CA
+    subgraph EC2["AWS EC2 · Ubuntu · Docker Compose"]
+        CA["Caddy<br/>HTTPS automático"] --> APP["App Gradio<br/>login · chat · pestañas"]
+        APP -->|"POST /webhook/chat-unab<br/>X-API-Key"| N8N
+        subgraph N8N["n8n · workflow 00 (agente)"]
+            G1["Guardrails de entrada<br/>reglas + nodo Guardrails"] --> R["Ruteo por intención<br/>Claude Haiku"]
+            R --> R1["01 RAG"] & R2["02 Calendario"] & R3["03 Historial"] & R4["04 Noticias"]
+            R1 & R2 & R3 & R4 --> AG["Agente Claude Haiku<br/>+ memoria Postgres<br/>+ cliente MCP"]
+            AG --> G2["Guardrail de salida"] --> LOG["chat_log"]
+        end
+        APP -->|"/auth · /app/datos · /historial"| MCP
+        AG -->|"MCP HTTP streamable :9000"| MCP["Servidor MCP · FastMCP (Python)<br/>10 herramientas + rutas HTTP"]
+        R1 -->|"/rag/search"| MCP
+        MCP --> EMB["Embeddings MiniLM 384 d<br/>(local)"]
+        ING["n8n · workflow 01<br/>ingesta RAG"] -->|"/embed"| MCP
+        SCR["n8n · workflow 04<br/>scraper cada 6 h"]
     end
-    N -->|LLM| CL["Claude API<br/>Haiku 5.5"]
-    N -->|CSV| GS["Google Sheet<br/>calendario"]
-    N -->|scraping 6 h| UN["unab.edu.co<br/>wp-json"]
-    M -->|SQL + pgvector| SB[("Supabase<br/>PostgreSQL + pgvector")]
-    N -->|memoria + log| SB
+    AG -->|LLM| CL["API de Anthropic<br/>Claude Haiku 5.5"]
+    R -->|LLM| CL
+    R2 -->|CSV| GS["Google Sheets<br/>calendario"]
+    SCR -->|"wp-json + RSS"| WEB["unab.edu.co · Google News · ENTER.CO"]
+    MCP -->|"SQL + pgvector"| DB
+    ING --> DB
+    SCR --> DB
+    LOG --> DB
+    AG -->|memoria| DB
+    subgraph DB["Supabase · PostgreSQL + pgvector"]
+        T1[("Esquema académico<br/>estudiantes, matrícula,<br/>notas, prerrequisitos")]
+        T2[("documento_chunk<br/>vector(384) + tsvector")]
+        T3[("noticias, chat_log,<br/>memoria, sesiones")]
+    end
 ```
+
+### Decisiones de diseño
+
+| Decisión | Alternativa descartada | Por qué |
+|---|---|---|
+| **n8n** orquesta todo (guardrails, ruteo, agente, memoria) | Código propio con LangChain | Lo pide el enunciado y deja el flujo visible y editable; cada paso queda registrado en las ejecuciones. |
+| **Servidor MCP propio** con FastMCP para los datos | Consultas SQL directas desde n8n | Las reglas del Reglamento quedan en un solo lugar, y el mismo servidor sirve al agente de n8n, a Claude Desktop y al cliente Python. |
+| **Ruteo por intención** antes del agente | Un solo agente con todo el contexto | Cada ruta trae solo el contexto que necesita (RAG, calendario, datos personales o noticias): respuestas más precisas y menos tokens. |
+| **Claude Haiku 5.5 sin *thinking*** | Claude Sonnet | Respuestas rápidas y baratas (US$5 de crédito alcanzan para cientos de preguntas); con *thinking* desactivado, la memoria persistente no choca con los bloques firmados. |
+| **Embeddings locales** (MiniLM multilingüe, 384 d) | API de embeddings de pago | Sin costo ni clave, entienden español y caben en una instancia pequeña. |
+| **Búsqueda híbrida** (vector + texto completo, RRF) | Solo similitud vectorial | Los términos exactos del Reglamento ("PGA", "prueba académica", "Art. 46") se recuperan mejor con texto completo; la fusión combina ambos. |
+| **Supabase** (PostgreSQL + pgvector) | Base vectorial separada | Datos académicos, vectores, memoria y registros en una sola base, con SQL y vistas que aplican las reglas. |
+| **Vistas SQL** con las reglas del Reglamento | Calcular en el LLM | El PGA, el estado académico y la carga máxima salen de SQL verificable, no de la "memoria" del modelo. |
+| **Gradio** + WebView para Android | App nativa | Lo pide el enunciado; una sola base de código para web, PWA y APK. |
+| **Docker Compose + Caddy** en EC2 | Instalar cada servicio a mano | Despliegue reproducible con un script y HTTPS automático. |
 
 **Flujo de una consulta:** la app envía el mensaje a n8n → guardrails de entrada (reglas + nodo nativo Guardrails) → glosario de jerga estudiantil → **ruteo por intención** con Claude Haiku → la ruta trae contexto (búsqueda híbrida en pgvector, Google Sheet, vistas del estudiante o noticias) → **agente Claude Haiku** con **memoria persistente** y **herramientas MCP** → guardrail de salida → registro en `chat_log` → respuesta.
 
 URLs del despliegue: `https://app.3-222-163-239.sslip.io` (app) · `https://n8n.3-222-163-239.sslip.io` (n8n) · `http://3.222.163.239:9000/mcp` (MCP).
 
 ## 2. Cumplimiento de entregables
+
+**Rúbrica de evaluación (Sección 2, Trabajo Final): dónde se evidencia cada criterio**
+
+| Criterio (peso) | Qué pide el nivel *Excelente* | Evidencia en este repositorio |
+|---|---|---|
+| Arquitectura del sistema (10 %) | Diagrama completo, flujo de datos y justificación | [Sección 1](#1-arquitectura): diagrama con n8n, PostgreSQL, agente/LLM, RAG, MCP, app y scraper; flujo de una consulta; tabla de **decisiones de diseño** |
+| Implementación de RAG (15 %) | Pipeline, documentos, justificación de chunks, overlap y embeddings, recuperación demostrada | [Sección 5](#5-rag-institucional): diagrama del pipeline, documentos, tabla de parámetros justificados y consultas con sus fragmentos recuperados |
+| Base de datos PostgreSQL (10 %) | Scripts de creación e inserción, modelo coherente, acceso al servidor con tablas y datos | [Sección 4](#4-base-de-datos-simulación-bannercosmos): modelo ER, scripts `db/01`–`08`, consultas de ejemplo y capturas de Supabase |
+| Workflows de n8n (15 %) | Agente, LLM, memoria, herramientas, MCP y guardrails; ejecución exitosa | [Sección 6](#6-workflows-de-n8n) y [8](#8-guardrails-y-memoria): workflows importables y capturas de ejecuciones reales |
+| Servidor MCP y webhook (10 %) | Herramientas/endpoints documentados; webhook probado con evidencia | [Sección 7](#7-servidor-mcp-fastmcp): 10 herramientas y todas las rutas, `curl`, colección de Postman, `deploy/probar_webhook.sh` y su salida |
+| Scraper de noticias (10 %) | Noticias del día (educación, tecnología, ingeniería de sistemas) con fuente y fecha, integradas | [Sección 9](#9-scraper-de-noticias): UNAB + Google News + ENTER.CO, con fuente, fecha y tema; en el agente y en la pestaña Noticias |
+| Aplicación Android (15 %) | Funciona en dispositivo con matrícula, estado, proyección y recomendaciones; conectada al webhook | [Sección 10](#10-aplicación-android-gradio): APK, capturas en un celular real y [video](docs/video_demo_chatbot_unab.mp4) |
+| Documentación técnica (10 %) | README completo con imágenes y manual de usuario | Este README y el [manual de usuario](#11-manual-de-usuario) |
+| Pertinencia pedagógica (5 %) | Respuestas personalizadas y accionables, prompts, educación de precisión, autoaprendizaje e investigación | [Sección 12](#12-pertinencia-pedagógica) y [`docs/prompts.md`](docs/prompts.md) |
+
+**Entregables del enunciado**
 
 | Entregable (enunciado) | Dónde está | Estado |
 |---|---|---|
@@ -111,10 +163,10 @@ URLs del despliegue: `https://app.3-222-163-239.sslip.io` (app) · `https://n8n.
 | `rag_docs/` | Documentos para RAG: Reglamento 2019, plan de estudios, artículos y preguntas frecuentes del CCD |
 | `mcp_server/` | Servidor FastMCP, embeddings, chunker, scraper, ingesta RAG, Dockerfile |
 | `n8n/` | `build_workflows.py` (genera los workflows) y `workflows/*.json` importables |
-| `app/` | App Gradio (PWA) y Dockerfile |
+| `app/` | App Gradio (PWA): `app.py` (pantallas y lógica) y `vistas.py` (pestañas) |
 | `android/` | Proyecto Android Studio (Kotlin, WebView) para generar APK |
-| `deploy/` | `user_data.sh`, `configurar.sh`, `actualizar.sh`, `cargar_bd.sh`, `importar_n8n.sh`, `ingestar_rag.sh`, diagnóstico, `Caddyfile` |
-| `docs/` | Capturas, guion del video, fuentes originales |
+| `deploy/` | `user_data.sh`, `configurar.sh`, `actualizar.sh`, `cargar_bd.sh`, `importar_n8n.sh`, `ingestar_rag.sh`, migraciones `migrar_06/07/08.sh`, `probar_webhook.sh`, diagnóstico, `Caddyfile` |
+| `docs/` | Capturas, video de demostración, `prompts.md`, colección de Postman, guion del video |
 | `tests/` | `mock_anthropic.py`: simulador de la API de Claude para probar los workflows sin API key |
 
 ## 4. Base de datos (simulación Banner/COSMOS)
@@ -134,6 +186,89 @@ Esquema `academico` en Supabase:
 | `documento_chunk` | — | Fragmentos RAG con `vector(384)` + `tsvector` |
 | `chat_log`, `n8n_chat_histories` | — | Auditoría y memoria del chat |
 
+**Modelo entidad-relación** (núcleo académico):
+
+```mermaid
+erDiagram
+    PROGRAMA ||--o{ ESTUDIANTE : "tiene"
+    PROGRAMA ||--o{ ASIGNATURA : "incluye"
+    ASIGNATURA ||--o{ PRERREQUISITO : "exige"
+    ESTUDIANTE ||--o{ HISTORIAL_ACADEMICO : "cursa"
+    ASIGNATURA ||--o{ HISTORIAL_ACADEMICO : "se registra en"
+    PERIODO ||--o{ HISTORIAL_ACADEMICO : "en"
+    ESTUDIANTE ||--o{ MATRICULA : "se matricula"
+    PERIODO ||--o{ MATRICULA : "en"
+    ESTUDIANTE ||--o{ CCD_HISTORIAL : "toma"
+    CCD_CURSO ||--o{ CCD_HISTORIAL : "registra"
+    ESTUDIANTE ||--o{ CERTIFICADO : "obtiene"
+    ESTUDIANTE ||--o| ACCESO : "contraseña"
+    ESTUDIANTE ||--o{ SESION : "dispositivos"
+    ESTUDIANTE ||--o{ EVENTO_PERSONAL : "agenda"
+    ESTUDIANTE ||--o{ CHAT_LOG : "conversa"
+    ESTUDIANTE {
+        varchar id_estudiante PK "U00XXXXXX"
+        varchar nombre_completo
+        int semestre_actual
+        varchar nivel_ingles
+    }
+    ASIGNATURA {
+        varchar cod_asignatura PK
+        varchar nombre
+        int creditos
+        int semestre_sugerido
+        varchar area
+    }
+    PRERREQUISITO {
+        varchar cod_asignatura FK
+        varchar cod_prerrequisito FK
+    }
+    HISTORIAL_ACADEMICO {
+        bigint id PK
+        numeric nota_final
+        varchar estado
+        int intento
+        numeric fallas_pct
+        varchar profesor
+    }
+    MATRICULA {
+        varchar id_estudiante FK
+        varchar cod_periodo FK
+        int creditos_inscritos
+        varchar estado_financiero
+        numeric pga
+        varchar estado_academico
+    }
+```
+
+**Scripts SQL** (se ejecutan en orden con `deploy/cargar_bd.sh`):
+
+| Script | Qué hace |
+|---|---|
+| `db/01_schema.sql` | Crea el esquema `academico`, las tablas, llaves, restricciones (`CHECK id ~ '^U[0-9]{8}$'`), pgvector e índice HNSW |
+| `db/02_views.sql` | Vistas con las reglas del Reglamento y función de búsqueda vectorial |
+| `db/03_seed.sql` | Inserta los datos sintéticos (generado por `db/generar_datos_sinteticos.py`) |
+| `db/04_calendario.sql` | Respaldo del calendario académico |
+| `db/05_busqueda_hibrida.sql` | `tsvector` + índice GIN y función `buscar_hibrido` (RRF) |
+| `db/06_perfil_y_acceso.sql` | Profesores, certificados, contraseñas (bcrypt) y sesiones |
+| `db/07_eventos_personales.sql` | Eventos personales de cada estudiante |
+| `db/08_noticias_fuentes.sql` | Fuente y tema de las noticias |
+
+**Consultas de ejemplo** (SQL Editor de Supabase):
+
+```sql
+-- Estado académico y proyección de una estudiante
+SELECT id_estudiante, pga, estado_academico, creditos_aprobados, semestres_restantes_estimados, carga_max_estimada
+FROM academico.v_proyeccion_grado WHERE id_estudiante = 'U00174957';
+
+-- Materias que puede inscribir (prerrequisitos cumplidos)
+SELECT asignatura, creditos, semestre_sugerido
+FROM academico.v_asignaturas_pendientes
+WHERE id_estudiante = 'U00174957' AND prerrequisitos_faltantes = '' AND NOT en_curso;
+
+-- Estudiantes por estado académico (Art. 24)
+SELECT estado_academico, COUNT(*) FROM academico.v_resumen_estudiante GROUP BY 1;
+```
+
 **Vistas con las reglas del Reglamento** (`db/02_views.sql`): `v_mejor_nota` (Art. 53, cuenta la nota más alta), `v_resumen_estudiante` (PGA del Art. 40 y estado del Art. 24), `v_asignaturas_pendientes` (prerrequisitos), `v_ccd_estado`/`v_ccd_resumen` (insignia), `v_proyeccion_grado` (carga máxima por estado según los Art. 84-85 y alertas del Art. 67).
 
 Datos generados con `db/generar_datos_sinteticos.py` (Faker `es_CO`, semilla 2026): 300 estudiantes, simulación semestre a semestre con prerrequisitos, límites de carga, reprobación por fallas ≥ 20 % (Art. 46) y pérdida de cupo.
@@ -148,16 +283,41 @@ Datos generados con `db/generar_datos_sinteticos.py` (Faker `es_CO`, semilla 202
 
 ## 5. RAG institucional
 
-| Documento | Fragmentos | Estrategia |
-|---|---|---|
-| Reglamento Estudiantil de Pregrado UNAB 2019 | 300 | Por artículo, ventanas de 600 caracteres, prefijo `[Reglamento UNAB, Art. N]` |
-| Plan de estudios Ingeniería de Sistemas | 18 | Por semestre |
-| Artículos del CCD + preguntas frecuentes | 58 | Por artículo / pregunta |
-| Noticias del scraper | 1 por noticia | Se agregan automáticamente |
+```mermaid
+flowchart LR
+    D["rag_docs/<br/>Reglamento 2019 · plan de estudios<br/>CCD · preguntas frecuentes"] --> L["Leer y extraer texto<br/>(workflow 01)"]
+    L --> C["Fragmentar<br/>600 caracteres · solape 120<br/>por artículo / semestre / pregunta"]
+    C --> E["Embeddings MiniLM<br/>384 dimensiones (POST /embed)"]
+    E --> V[("documento_chunk<br/>vector(384) HNSW + tsvector GIN")]
+    Q["Pregunta + glosario<br/>de jerga"] --> H["buscar_hibrido()<br/>vector top 40 + texto completo<br/>fusión RRF"]
+    V --> H --> K["Top 8 fragmentos<br/>con fuente y artículo"] --> A["Agente Claude:<br/>responde citando la fuente"]
+```
 
-- **Embeddings locales** de 384 dimensiones (MiniLM multilingüe): sin costo y sin API key.
-- **Búsqueda híbrida** (`buscar_hibrido`): similitud coseno de pgvector + texto completo en español (`tsvector`), fusionadas con *Reciprocal Rank Fusion*.
-- **Glosario de jerga estudiantil**: "PFU", "rajarse una materia", "el promedio", "info"… se expanden a términos del Reglamento antes de buscar.
+**Documentos usados** (todos reales, en `rag_docs/`):
+
+| Documento | Fragmentos | Cómo se divide |
+|---|---|---|
+| Reglamento Estudiantil de Pregrado UNAB 2019 | 300 | Por artículo, con el prefijo `[Reglamento UNAB, Art. N]` para citarlo |
+| Plan de estudios de Ingeniería de Sistemas (requisitos, créditos, prerrequisitos) | 18 | Por semestre y componente |
+| Centro de Competencias Digitales (rutas, insignia, prueba diagnóstica) | 58 | Por artículo y por pregunta frecuente |
+| Noticias del scraper | 1 por noticia | Se agregan solas cada 6 horas |
+
+**Parámetros y por qué se eligieron:**
+
+| Parámetro | Valor | Justificación |
+|---|---|---|
+| Modelo de embeddings | `paraphrase-multilingual-MiniLM-L12-v2` (384 d) | Multilingüe (entiende español), corre en CPU dentro del servidor MCP sin costo ni API key. |
+| Tamaño del fragmento | **600 caracteres** | El modelo lee como máximo **128 tokens**; en español eso son unos 500-650 caracteres. Fragmentos más largos se truncan y pierden información. Con 1.000 caracteres la recuperación empeoró en las pruebas. |
+| Solape | **120 caracteres (20 %)** | Evita cortar una regla entre dos fragmentos (por ejemplo, la condición y la consecuencia de un artículo). |
+| Unidad de corte | Artículo / semestre / pregunta | Cada fragmento conserva su artículo o sección para que el agente pueda citarlo. |
+| Búsqueda | Híbrida: coseno (pgvector, top 40) + texto completo en español (`plainto_tsquery` y variante OR) | Los términos exactos del Reglamento ("PGA", "prueba académica") se encuentran mejor por texto; las preguntas en lenguaje natural, por vector. |
+| Fusión | *Reciprocal Rank Fusion*, `1/(60 + posición)` | Combina listas sin calibrar puntajes; k = 60 es el valor propuesto por Cormack et al. (2009). |
+| Fragmentos al agente | 8 | Suficiente contexto sin saturar el prompt. |
+| Glosario de jerga | "PFU", "rajarse", "el promedio"… | Se expanden a términos del Reglamento antes de buscar. |
+
+**Recuperación demostrada con consultas reales** (ruta pública `GET /evidencias` del servidor MCP; los resultados completos se ven en `https://mcp.3-222-163-239.sslip.io/evidencias`):
+
+<!-- EVIDENCIA_RAG -->
 
 ## 6. Workflows de n8n
 
@@ -205,7 +365,36 @@ Ejecuciones reales en el servidor de AWS (n8n 2.47.7 en EC2). Cada pregunta desd
 | `calendario_academico` | Fechas (respaldo en BD) |
 | `noticias_recientes` | Noticias por etiqueta o palabra clave |
 
-Rutas HTTP auxiliares: `/health`, `/auth`, `/historial`, `/embed`, `/rag/search` y `/scrape` (protegidas con `X-API-Key`).
+**Rutas HTTP del servidor** (todas consultan la base de datos; las que modifican datos exigen `X-API-Key`):
+
+| Método y ruta | Qué hace | Clave |
+|---|---|---|
+| `POST /mcp` | Protocolo MCP (HTTP streamable): las 10 herramientas de la tabla anterior | — |
+| `GET /health` | Estado y conteo de estudiantes, fragmentos y noticias | — |
+| `GET /evidencias` | Tablas con datos, herramientas MCP, llamada de ejemplo y recuperación RAG (sin LLM, caché 10 min) | — |
+| `POST /rag/search` | Búsqueda híbrida en los documentos | — |
+| `GET /auth/config` · `POST /auth` · `/auth/token` · `/auth/password` · `/auth/sesiones` | Inicio de sesión, contraseña, sesiones guardadas, perfil de prueba | Sí |
+| `POST /app/datos` | Datos de las pestañas: noticias, eventos, conversaciones, personal | Sí |
+| `POST /app/eventos` | Crear o eliminar eventos personales | Sí |
+| `POST /historial` | Últimos intercambios del estudiante | Sí |
+| `POST /embed` | Embeddings para el workflow de ingesta | Sí |
+| `POST /scrape` | Ejecuta el scraper de noticias | Sí |
+
+**Webhook de n8n** — `POST https://n8n.3-222-163-239.sslip.io/webhook/chat-unab` con `X-API-Key`:
+
+```bash
+curl -s -X POST https://n8n.3-222-163-239.sslip.io/webhook/chat-unab \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_TOKEN" \
+  -d '{"sessionId":"prueba-1","id_estudiante":"U00174957","nombre":"Valentina Rojas Méndez",
+       "programa":"Ingeniería de Sistemas","mensaje":"¿Cuál es mi estado académico y qué me recomiendas?"}'
+# → {"respuesta": "Valentina, ...", "intencion": "historial_personal"}
+```
+
+Pruebas listas para correr:
+- `bash deploy/probar_webhook.sh` en la EC2: salud del servidor, inicio de sesión, búsqueda RAG, webhook sin clave (rechazado) y dos preguntas reales al webhook (una normal y un intento de manipulación).
+- `docs/postman_coleccion.json`: colección de Postman con el webhook y todas las rutas (importar y poner la variable `api_key`).
+
+<!-- EVIDENCIA_WEBHOOK -->
 
 **Cliente MCP con Claude** (`mcp_server/cliente_mcp_claude.py`): se conecta al servidor por HTTP streamable, descubre las herramientas, se las ofrece a Claude y ejecuta las llamadas que Claude decida.
 ```bash
@@ -285,16 +474,67 @@ Cada noticia se guarda con **título, fecha, fuente, tema** (`Educación`, `Tecn
 |---|---|---|
 | ![](docs/capturas/app_01_login.png) | ![](docs/capturas/app_02_login_rechazado.png) | ![](docs/capturas/app_03_sesion_iniciada.png) |
 
-## 11. Despliegue paso a paso en AWS
+## 11. Manual de usuario
 
-### 11.1 Cuentas y servicios
+**Instalar la app.** Hay dos formas:
+- **APK:** descargue `AsistenteUNAB.apk` de [Releases](https://github.com/dportilla219/chatbot-unab/releases) e instálelo (Android pide permitir apps de origen desconocido).
+- **Desde Chrome:** abra `https://app.3-222-163-239.sslip.io`, menú ⋮ → *Agregar a la pantalla principal*.
+
+| Paso | Qué hacer | Pantalla |
+|---|---|---|
+| 1. Iniciar sesión | Escriba su nombre completo, su ID (`U00XXXXXX`), su carrera y su contraseña. La primera vez la contraseña es su mismo ID y la app le pide crear una nueva (8 caracteres o más, con letras y números). Deje marcado *Mantener la sesión abierta* para no volver a escribir sus datos. Para probar sin datos, toque **Entrar con perfil de prueba**. | ![](docs/capturas/manual_01_inicio_sesion.jpg) |
+| 2. Preguntar en el chat | Escriba su pregunta abajo y toque **Enviar**, o toque una sugerencia ("Mi estado y avance", "Cursos del próximo semestre", "Recomendaciones"…). Puede escribir como habla: entiende jerga como "PFU" o "rajarse una materia". **+ Nueva** empieza otra conversación. | ![](docs/capturas/manual_02_chat.jpg) |
+| 3. Leer la respuesta | El asistente responde con sus datos (créditos, PGA, estado, alertas) y recomendaciones, y cita el artículo del Reglamento cuando aplica. Debajo aparece la ruta que usó. | ![](docs/capturas/manual_03_respuesta.jpg) |
+| 4. Historial | Lista de sus conversaciones. Toque una para abrirla y continuarla: el asistente recuerda lo que hablaron. | ![](docs/capturas/manual_04_historial.jpg) |
+| 5. Noticias | Noticias de la UNAB y del día sobre educación, tecnología e ingeniería de sistemas, con fuente y fecha. Filtre por tema con los botones de arriba. | ![](docs/capturas/manual_05_noticias.jpg) |
+| 6. Eventos | Próximas fechas del calendario UNAB (naranja) y sus eventos personales (morado). Agregue un evento con nombre, fecha y descripción; solo usted lo ve. | ![](docs/capturas/manual_06_eventos.jpg) |
+| 7. Personal | Sus datos, cursos de toda la carrera con nota, estado y profesor, y sus certificados. | ![](docs/capturas/manual_07_personal.jpg) |
+| 8. Materias que faltan | Materias pendientes por semestre, con las que ya puede inscribir y las que requieren prerrequisitos. | ![](docs/capturas/manual_08_materias.jpg) |
+| 9. Seguridad | Cambie su contraseña, vea los dispositivos con la sesión abierta y ciérrelos. **Cerrar sesión** sale en este dispositivo. | ![](docs/capturas/manual_09_seguridad.jpg) |
+
+**Preguntas que puede hacer:**
+- *Matrícula y estado:* "¿Cuál es mi estado de matrícula y avance?", "¿Cuánto debo de matrícula?"
+- *Proyección y requisitos:* "¿Cuántos semestres me faltan y qué requisitos tengo pendientes?"
+- *Recomendaciones:* "¿Qué cursos debo tomar el próximo semestre?", "¿Qué me recomiendas para tener éxito en la carrera?"
+- *Reglamento:* "¿Qué pasa si quedo en prueba académica?", "¿Cuántas fallas puedo tener?"
+- *Competencias digitales:* "¿Qué es la insignia?", "¿Qué cursos de competencias digitales he tomado?"
+- *Calendario y noticias:* "¿Cuándo son las inscripciones?", "¿Hay noticias de tecnología hoy?"
+
+> Las capturas de este manual son de la app en un navegador con tamaño de celular; las de la sección 10 son del celular real.
+
+## 12. Pertinencia pedagógica
+
+El asistente está diseñado alrededor de tres ideas de investigación educativa:
+
+| Enfoque | Qué dice la investigación | Cómo lo aplica el asistente |
+|---|---|---|
+| **Educación de precisión** | Usar analítica de aprendizaje e IA para identificar a tiempo a los estudiantes en riesgo y darles una intervención ajustada a su caso (Yang, 2021; Yang, Chen y Ogata, 2021). | Las vistas SQL calculan PGA, estado académico (Art. 24), carga máxima y alertas; las recomendaciones de "educación de precisión" usan el promedio por área, las reprobaciones, las fallas y los prerrequisitos de cada estudiante. Andrés (condicional) y Valentina (normal) reciben planes distintos. |
+| **Autoaprendizaje (aprendizaje autorregulado)** | Los estudiantes que fijan metas, planifican y monitorean su propio avance rinden mejor; la autorregulación se puede enseñar y apoyar (Zimmerman, 2002; Panadero, 2017). | Cada respuesta termina en acciones concretas (qué inscribir, cuántas horas de inglés, qué área reforzar); la pestaña Personal muestra el avance; los eventos personales ayudan a planificar. |
+| **Investigación** | Vincular temprano a los estudiantes con semilleros y proyectos fortalece su formación. | El eje *Investigación* recomienda semilleros según PGA y semestre, sugiere el área más fuerte para el proyecto de grado y cuándo empezar a planearlo. |
+| **Asesoría académica con chatbots** | Las revisiones sistemáticas muestran que los chatbots de asesoría resuelven consultas frecuentes y dan apoyo personalizado; su principal reto son los casos complejos (Assayed et al., 2024). | Responde lo frecuente (Reglamento, plan, fechas) y remite al director de programa, Punto U o Bienestar cuando el caso lo requiere. |
+
+**Prompts usados:** el clasificador, las instrucciones por ruta y el prompt de sistema del agente están en [`docs/prompts.md`](docs/prompts.md). Reglas clave del prompt: usar siempre los datos del estudiante y las herramientas MCP antes de responder, citar el artículo del Reglamento, organizar las recomendaciones en **Investigación, Autoaprendizaje y Educación de precisión**, adaptar el tono (empatía si el estudiante está angustiado) y no inventar datos.
+
+**Referencias**
+- Assayed, S. K., Alkhatib, M. y Shaalan, K. (2024). [A Systematic Review of Conversational AI Chatbots in Academic Advising](https://link.springer.com/chapter/10.1007/978-3-031-56121-4_33). Springer.
+- Cormack, G. V., Clarke, C. L. A. y Büttcher, S. (2009). [Reciprocal rank fusion outperforms Condorcet and individual rank learning methods](https://doi.org/10.1145/1571941.1572114). *SIGIR '09*, 758-759.
+- Lewis, P. et al. (2020). [Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks](https://arxiv.org/abs/2005.11401). *NeurIPS 2020*.
+- Panadero, E. (2017). [A Review of Self-regulated Learning: Six Models and Four Directions for Research](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5408091/). *Frontiers in Psychology*, 8, 422.
+- Reimers, N. y Gurevych, I. — modelo [`paraphrase-multilingual-MiniLM-L12-v2`](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2) (384 dimensiones, 128 tokens).
+- Yang, C. C. Y., Chen, I. Y. L. y Ogata, H. (2021). [Toward Precision Education: Educational Data Mining and Learning Analytics for Identifying Students' Learning Patterns with Ebook Systems](https://repository.kulib.kyoto-u.ac.jp/dspace/bitstream/2433/261247/1/ETS24_1_12.pdf). *Educational Technology & Society*, 24(1), 152-163.
+- Yang, S. J. H. (2021). [Precision Education: A New Challenge for AI in Education](https://libmast.utm.my/Record/doaj.art-f70b1112daea4385a76f1d073d2a0331). *Educational Technology & Society*, 24(1).
+- Zimmerman, B. J. (2002). [Becoming a Self-Regulated Learner: An Overview](https://doi.org/10.1207/s15430421tip4102_2). *Theory Into Practice*, 41(2), 64-70.
+
+## 13. Despliegue paso a paso en AWS
+
+### 13.1 Cuentas y servicios
 **Anthropic** (API key) y **Supabase** (organización y proyecto en *East US*):
 
 | Consola de Anthropic | API key creada | Organización en Supabase |
 |---|---|---|
 | ![](docs/capturas/anthropic_00_consola.png) | ![](docs/capturas/anthropic_01_api_key.png) | ![](docs/capturas/supabase_01_organizacion.png) |
 
-### 11.2 Instancia EC2 (Learner Lab, us-east-1)
+### 13.2 Instancia EC2 (Learner Lab, us-east-1)
 1. *Launch instance*: Ubuntu 24.04, **t3.medium**, key pair `vockey`, 30 GB gp3.
 
 ![Tipo de instancia](docs/capturas/aws_02b_tipo_instancia.png)
@@ -316,7 +556,7 @@ Cada noticia se guarda con **título, fecha, fuente, tema** (`Educación`, `Tecn
 ![Asociar IP elástica](docs/capturas/aws_06_asociar_ip_elastica.png)
 ![Instancia en ejecución](docs/capturas/aws_05_instancia_ip_elastica.png)
 
-### 11.3 Configuración (EC2 Instance Connect)
+### 13.3 Configuración (EC2 Instance Connect)
 ```bash
 cloud-init status --wait
 cd ~/chatbot-unab && git pull && bash deploy/configurar.sh
@@ -325,10 +565,10 @@ El script pide la cadena de Supabase (*Connect → Session pooler*, puerto 5432)
 
 ![Importación de workflows](docs/capturas/deploy_02_importar_workflows.png)
 
-### 11.4 Primer acceso a n8n
+### 13.4 Primer acceso a n8n
 Abrir `https://n8n.<ip>.sslip.io` y crear el usuario dueño (queda en el servidor; no requiere cuenta en n8n.io).
 
-## 12. Pruebas realizadas
+## 14. Pruebas realizadas
 
 Pruebas contra el despliegue real con 10 estudiantes sintéticos distintos (primera ronda con Sonnet 5.5 como agente):
 
@@ -359,7 +599,7 @@ Diagnóstico durante el despliegue (script `deploy/ultimo_error.py`):
 
 ![Diagnóstico](docs/capturas/deploy_03_diagnostico_n8n.png)
 
-## 13. Usuarios de demostración
+## 15. Usuarios de demostración
 
 | ID | Nombre completo | Perfil |
 |---|---|---|
@@ -375,7 +615,7 @@ Diagnóstico durante el despliegue (script `deploy/ultimo_error.py`):
 
 Carrera: **Ingeniería de Sistemas**.
 
-## 14. Mantenimiento y diagnóstico
+## 16. Mantenimiento y diagnóstico
 
 | Necesidad | Comando (en la EC2) |
 |---|---|
@@ -388,7 +628,7 @@ Carrera: **Ingeniería de Sistemas**.
 
 **Learner Lab**: la instancia se detiene cuando termina la sesión del lab. Al iniciar el lab de nuevo, los contenedores arrancan solos (`restart: unless-stopped`) y la IP elástica mantiene las URLs.
 
-## 15. Limitaciones y fuentes
+## 17. Limitaciones y fuentes
 
 - Estudiantes, notas, pagos y prerrequisitos son **sintéticos**; el plan de estudios, el Reglamento y la información del CCD son reales.
 - Parte del calendario 2027-1 es sintética; cada fila indica su fuente.
