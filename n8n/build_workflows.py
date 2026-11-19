@@ -133,7 +133,8 @@ const GLOSARIO = [
 const expansiones = GLOSARIO.filter(([rx]) => rx.test(mensaje)).map(([, t]) => t);
 const mensaje_busqueda = expansiones.length ? `${mensaje} (${expansiones.join('; ')})` : mensaje;
 return [{ json: {
-  sessionId: String(b.sessionId || id), id_estudiante: id, nombre: String(b.nombre || ''),
+  // Cada conversación tiene su propia memoria; la clave siempre empieza con el ID del estudiante
+  sessionId: (() => { const c = String(b.sessionId || id); return c.startsWith(id) ? c : `${id}:${c}`; })(), id_estudiante: id, nombre: String(b.nombre || ''),
   programa: String(b.programa || 'Ingeniería de Sistemas'), mensaje, mensaje_busqueda, glosario: expansiones.join('; '),
   bloqueado: motivos.length > 0, motivo: motivos.join(' '),
   fecha_hoy: $now.setZone('America/Bogota').toFormat('yyyy-MM-dd')
@@ -307,9 +308,9 @@ code(w, "Respuesta final", "return [{ json: $input.first().json }];", [1870, 120
 pg_query(w, "Pregunta anterior (chat_log)", """
 SELECT pregunta, left(respuesta, 700) AS respuesta
 FROM academico.chat_log
-WHERE id_estudiante = $1 AND bloqueado = false AND creado > now() - interval '3 hours'
+WHERE session_id = $1 AND bloqueado = false
 ORDER BY id DESC LIMIT 1;
-""", [200, 420], replacement="={{ $('Normalizar entrada').item.json.id_estudiante }}", always=True)
+""", [200, 420], replacement="={{ $('Normalizar entrada').item.json.sessionId }}", always=True)
 code(w, "Unir seguimiento", r"""
 // Si el mensaje depende del anterior ("es para un amigo", "¿y cuál de esos?", "y cómo lo hago"),
 // se une con la pregunta previa para que el clasificador y el RAG entiendan el tema.

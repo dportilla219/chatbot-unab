@@ -510,6 +510,23 @@ def _app_historial_chat(sid: str):
                            ORDER BY id DESC LIMIT 60""", (sid,))
 
 
+def _app_conversaciones(sid: str):
+    """Conversaciones del estudiante (una por session_id), la más reciente primero."""
+    return db.fetch_all("""
+        SELECT session_id AS id, COUNT(*) AS mensajes,
+               (array_agg(pregunta ORDER BY id))[1] AS primera,
+               to_char((MAX(creado) AT TIME ZONE 'UTC') AT TIME ZONE 'America/Bogota','YYYY-MM-DD HH24:MI') AS ultima
+        FROM chat_log WHERE id_estudiante=%s AND respuesta IS NOT NULL
+        GROUP BY session_id ORDER BY MAX(creado) DESC LIMIT 50""", (sid,))
+
+
+def _app_conversacion(sid: str, conv: str):
+    return db.fetch_all("""SELECT pregunta, respuesta, intencion,
+                                  to_char((creado AT TIME ZONE 'UTC') AT TIME ZONE 'America/Bogota','YYYY-MM-DD HH24:MI') AS fecha
+                           FROM chat_log WHERE id_estudiante=%s AND session_id=%s AND respuesta IS NOT NULL
+                           ORDER BY id LIMIT 200""", (sid, conv))
+
+
 def _app_personal(sid: str):
     prof = "h.profesor" if _existe("historial_academico", "profesor") else "NULL"
     cursos = db.fetch_all(f"""SELECT h.cod_periodo AS periodo, p.descripcion AS periodo_txt, a.cod_asignatura AS codigo,
@@ -555,10 +572,17 @@ async def app_datos(request: Request):
             data = _app_noticias()
         elif seccion == "eventos":
             data = _app_eventos()
-        elif seccion in ("historial", "personal"):
+        elif seccion in ("historial", "personal", "conversaciones", "conversacion"):
             if not ID_RX.match(sid):
                 return JSONResponse({"error": "id inválido"}, status_code=400)
-            data = _app_historial_chat(sid) if seccion == "historial" else _app_personal(sid)
+            if seccion == "historial":
+                data = _app_historial_chat(sid)
+            elif seccion == "conversaciones":
+                data = _app_conversaciones(sid)
+            elif seccion == "conversacion":
+                data = _app_conversacion(sid, str(b.get("conversacion") or ""))
+            else:
+                data = _app_personal(sid)
         else:
             return JSONResponse({"error": "sección desconocida"}, status_code=400)
     except Exception as e:  # noqa: BLE001

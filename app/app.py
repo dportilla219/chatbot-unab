@@ -117,21 +117,60 @@ html, body { overflow-x: hidden !important; }
                 color:var(--tinta) !important; font-size:.8rem !important; padding:6px 12px !important; box-shadow:none !important; }
 #chips button:hover { border-color:var(--naranja) !important; background:var(--naranja-claro) !important; }
 
-/* Pestañas: barra fija abajo, el chat en el centro */
-#tabs > .tab-wrapper, #tabs > div:first-child:not(.tabitem) { position:fixed !important; bottom:0; left:0; right:0; z-index:50;
-      background:#fff !important; border-top:1px solid var(--borde) !important; padding:6px 6px calc(6px + env(safe-area-inset-bottom)) !important;
-      box-shadow:0 -4px 14px rgba(17,24,39,.06); }
-#tabs [role="tablist"] { display:flex !important; justify-content:space-around !important; width:100% !important;
-      max-width:760px; margin:auto; gap:0 !important; border:none !important; overflow:visible !important; }
-#tabs [role="tab"] { flex:1 1 0 !important; font-size:.74rem !important; font-weight:600 !important; color:var(--gris) !important;
-      padding:8px 2px !important; border:none !important; border-radius:12px !important; background:transparent !important; min-width:0 !important; }
-#tabs [role="tab"][aria-selected="true"] { color:var(--naranja) !important; background:var(--naranja-claro) !important; }
+/* Pestañas: barra fija abajo con íconos, el chat en el centro y destacado */
+#tabs > .tab-wrapper, #tabs > div:first-child:not(.tabitem) { position:fixed !important; bottom:0 !important; left:0; right:0; z-index:50; margin:0 !important;
+      background:rgba(255,255,255,.97) !important; backdrop-filter:blur(8px); border-top:1px solid var(--borde) !important;
+      padding:6px 8px calc(8px + env(safe-area-inset-bottom)) !important; box-shadow:0 -6px 20px rgba(17,24,39,.07);
+      overflow:visible !important; }
+#tabs [role="tablist"] { display:flex !important; justify-content:space-around !important; align-items:flex-end !important;
+      width:100% !important; max-width:560px; margin:auto; gap:0 !important; border:none !important; border-bottom:none !important;
+      box-shadow:none !important; overflow:visible !important; }
+#tabs .tab-wrapper::after, #tabs [role="tablist"]::after { display:none !important; }
+#tabs [role="tab"] { flex:1 1 0 !important; display:flex !important; flex-direction:column !important; align-items:center !important;
+      gap:3px !important; font-size:.68rem !important; font-weight:600 !important; color:#9CA3AF !important;
+      padding:4px 2px !important; border:none !important; border-radius:12px !important; background:transparent !important;
+      min-width:0 !important; height:auto !important; min-height:52px !important; overflow:visible !important;
+      justify-content:flex-end !important; transition:color .15s ease; }
+#tabs [role="tablist"], #tabs .tab-container, #tabs > .tab-wrapper { height:auto !important; overflow:visible !important; }
+#tabs [role="tab"]::before { content:""; flex:0 0 auto; width:22px; height:22px; background-color:currentColor;
+      -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; -webkit-mask-position:center; mask-position:center;
+      -webkit-mask-size:contain; mask-size:contain; transition:transform .15s ease; }
+#tabs [role="tab"][aria-selected="true"] { color:var(--naranja) !important; }
+#tabs [role="tab"][aria-selected="true"]::before { transform:translateY(-1px) scale(1.06); }
 #tabs [role="tab"][aria-selected="true"]::after { display:none !important; }
+/* Chat: botón central elevado */
+#tabs [role="tab"][data-tab-id="chat"] { color:var(--tinta) !important; }
+#tabs [role="tab"][data-tab-id="chat"]::before { width:50px; height:50px; margin-top:-24px; border-radius:50%;
+      -webkit-mask-image:none !important; mask-image:none !important; background-color:transparent;
+      background: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27white%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M4%205h16v11H9l-5%204z%27/%3E%3Cpath%20d%3D%27M8%209h8M8%2012h5%27/%3E%3C/svg%3E") center / 24px no-repeat, linear-gradient(135deg, var(--naranja), #F26B21);
+      box-shadow:0 0 0 4px #fff, 0 6px 16px rgba(247,148,29,.45); }
+#tabs [role="tab"][data-tab-id="chat"]::after { display:none !important; }
+#tabs [role="tab"][data-tab-id="chat"][aria-selected="true"] { color:var(--naranja) !important; }
+#tabs [role="tab"][data-tab-id="chat"] { position:relative; }
 #tabs .tabitem { padding:0 !important; border:none !important; background:transparent !important; }
 #tabs .overflow-menu, #tabs .overflow-item-selected { display:none !important; }
 #tabs .tab-container.visually-hidden button { padding:2px 1px !important; font-size:.55rem !important; min-width:0 !important; }
-.gradio-container { padding-bottom:96px !important; }
-.recargar { max-width:140px; margin-left:auto; }
+.gradio-container { padding-bottom:118px !important; }
+#tabs [role="tab"][data-tab-id="noticias"]::before { -webkit-mask-image:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M4%204h13v16H6a2%202%200%200%201-2-2z%27/%3E%3Cpath%20d%3D%27M17%208h3v10a2%202%200%200%201-2%202%27/%3E%3Cpath%20d%3D%27M8%208h5M8%2012h5M8%2016h3%27/%3E%3C/svg%3E"); mask-image:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M4%204h13v16H6a2%202%200%200%201-2-2z%27/%3E%3Cpath%20d%3D%27M17%208h3v10a2%202%200%200%201-2%202%27/%3E%3Cpath%20d%3D%27M8%208h5M8%2012h5M8%2016h3%27/%3E%3C/svg%3E"); }
+#tabs [role="tab"][data-tab-id="historial"]::before { -webkit-mask-image:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%279%27/%3E%3Cpath%20d%3D%27M12%207v5l3%202%27/%3E%3C/svg%3E"); mask-image:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%279%27/%3E%3Cpath%20d%3D%27M12%207v5l3%202%27/%3E%3C/svg%3E"); }
+#tabs [role="tab"][data-tab-id="chat"]::before { -webkit-mask-image:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M4%205h16v11H9l-5%204z%27/%3E%3Cpath%20d%3D%27M8%209h8M8%2012h5%27/%3E%3C/svg%3E"); mask-image:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M4%205h16v11H9l-5%204z%27/%3E%3Cpath%20d%3D%27M8%209h8M8%2012h5%27/%3E%3C/svg%3E"); }
+#tabs [role="tab"][data-tab-id="eventos"]::before { -webkit-mask-image:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20x%3D%273%27%20y%3D%275%27%20width%3D%2718%27%20height%3D%2716%27%20rx%3D%272%27/%3E%3Cpath%20d%3D%27M3%2010h18M8%203v4M16%203v4%27/%3E%3C/svg%3E"); mask-image:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20x%3D%273%27%20y%3D%275%27%20width%3D%2718%27%20height%3D%2716%27%20rx%3D%272%27/%3E%3Cpath%20d%3D%27M3%2010h18M8%203v4M16%203v4%27/%3E%3C/svg%3E"); }
+#tabs [role="tab"][data-tab-id="personal"]::before { -webkit-mask-image:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%278%27%20r%3D%274%27/%3E%3Cpath%20d%3D%27M4%2021c0-4%204-6%208-6s8%202%208%206%27/%3E%3C/svg%3E"); mask-image:url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%278%27%20r%3D%274%27/%3E%3Cpath%20d%3D%27M4%2021c0-4%204-6%208-6s8%202%208%206%27/%3E%3C/svg%3E"); }
+
+/* Historial de conversaciones */
+#conv-cabecera { align-items:center !important; }
+#conv-cabecera h3 { margin:0; font-size:1rem; color:var(--tinta); }
+#lista-conv { background:transparent !important; border:none !important; padding:0 !important; }
+#lista-conv .wrap { display:flex !important; flex-direction:column !important; gap:8px !important; }
+#lista-conv label { display:block !important; width:100% !important; background:#fff !important; border:1px solid var(--borde) !important;
+      border-radius:14px !important; padding:12px 14px !important; color:var(--tinta) !important; font-size:.88rem !important;
+      font-weight:600 !important; box-shadow:none !important; white-space:normal !important; line-height:1.35; }
+#lista-conv label.selected, #lista-conv label:has(input:checked) { border-color:var(--naranja) !important; background:var(--naranja-claro) !important; }
+#lista-conv input { display:none !important; }
+#lista-conv label span { white-space:pre-line !important; }
+#nueva-conv { max-width:170px; }
+#chat-acciones { justify-content:flex-end !important; margin-bottom:-6px !important; }
+#nueva-chat { max-width:170px; background:#fff !important; border:1px solid var(--borde) !important; color:var(--tinta) !important; }
 
 /* Botón principal */
 button.primary { background: var(--naranja) !important; border:none !important; color:#fff !important; }
@@ -194,6 +233,57 @@ def ver_eventos(state):
     return vistas.eventos(datos_app("eventos", state))
 
 
+def _nueva_conv(sid):
+    return f"{sid}:{uuid.uuid4().hex[:12]}"
+
+
+def _titulo_conv(c):
+    if c["id"] == c.get("_sid"):
+        t = "Conversaciones anteriores"
+    else:
+        t = " ".join((c.get("primera") or "Conversación").split())
+        t = t[:52] + ("…" if len(t) > 52 else "")
+    n = c.get("mensajes") or 0
+    return f"{t}\n{c['ultima']} · {n} pregunta{'s' if n != 1 else ''}"
+
+
+def lista_conversaciones(state):
+    if not state:
+        return gr.update(choices=[], value=None)
+    convs = datos_app("conversaciones", state) or []
+    for c in convs:
+        c["_sid"] = state["id"]
+    actual = state.get("conv") if any(c["id"] == state.get("conv") for c in convs) else None
+    return gr.update(choices=[(_titulo_conv(c), c["id"]) for c in convs], value=actual)
+
+
+def abrir_conversacion(conv, state):
+    if not conv or not state:
+        return gr.update(), state, gr.update()
+    try:
+        r = requests.post(f"{API_URL}/app/datos", json={"seccion": "conversacion", "id_estudiante": state["id"],
+                                                         "conversacion": conv}, headers=HDR, timeout=20).json()
+        filas = r.get("datos") or []
+    except Exception:  # noqa: BLE001
+        filas = []
+    msgs = []
+    for m in filas:
+        msgs.append({"role": "user", "content": m["pregunta"]})
+        msgs.append({"role": "assistant", "content": m["respuesta"] + (
+            f"\n\n<sub>Ruta: {m['intencion']}</sub>" if m.get("intencion") else "")})
+    state = {**state, "conv": conv}
+    return msgs, state, gr.Tabs(selected="chat")
+
+
+def nueva_conversacion(state):
+    if not state:
+        return gr.update(), state, gr.update()
+    state = {**state, "conv": _nueva_conv(state["id"])}
+    nombre = state["nombre"].split()[0]
+    return ([{"role": "assistant", "content": f"Nueva conversación, **{nombre}**. ¿En qué te ayudo?"}], state,
+            gr.Tabs(selected="chat"))
+
+
 def ver_historial(state):
     return vistas.historial(datos_app("historial", state)) if state else ""
 
@@ -224,13 +314,13 @@ def nombre_dispositivo(request: gr.Request | None) -> str:
 def _entrar(r, recordar, password_usada=""):
     est = r["estudiante"]
     state = {"id": est["id_estudiante"], "nombre": est["nombre_completo"], "programa": est["programa"],
-             "semestre": est["semestre_actual"], "session": est["id_estudiante"], "token": r.get("token") or "",
+             "semestre": est["semestre_actual"], "conv": _nueva_conv(est["id_estudiante"]), "token": r.get("token") or "",
              "demo": bool(r.get("demo")), "pw": password_usada if r.get("debe_cambiar") else ""}
-    previos = historial_previo(est["nombre_completo"], est["id_estudiante"], est["programa"])
+    previos = []
     nombre = est["nombre_completo"].split()[0]
-    if previos:
-        saludo = (f"¡Hola de nuevo, **{nombre}**! Arriba está nuestra conversación anterior; "
-                  "puedes continuar donde la dejaste o preguntarme algo nuevo.")
+    if datos_app("conversaciones", state):
+        saludo = (f"¡Hola de nuevo, **{nombre}**! Empezamos una conversación nueva. "
+                  "Tus conversaciones anteriores están en la pestaña **Historial**, donde puedes abrirlas y continuarlas.")
     else:
         saludo = (f"¡Hola, **{nombre}**! Soy tu asistente académico. "
                   f"Estás en **{est['programa']}**, semestre {est['semestre_actual']}. "
@@ -351,7 +441,7 @@ def responder(pendiente, historial, state):
     historial = historial or []
     if not pendiente:
         return historial
-    payload = {"sessionId": state["session"], "id_estudiante": state["id"], "nombre": state["nombre"],
+    payload = {"sessionId": state.get("conv") or state["id"], "id_estudiante": state["id"], "nombre": state["nombre"],
                "programa": state["programa"], "mensaje": pendiente, "request_id": str(uuid.uuid4())}
     try:
         r = requests.post(N8N_CHAT_URL, json=payload, headers=HDR, timeout=120)
@@ -412,9 +502,14 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
             with gr.Tab("Noticias", id="noticias") as tab_noticias:
                 html_noticias = gr.HTML(padding=False)
             with gr.Tab("Historial", id="historial") as tab_historial:
-                html_historial = gr.HTML(padding=False)
+                with gr.Row(elem_id="conv-cabecera"):
+                    gr.HTML("<h3>Tus conversaciones</h3>", padding=False)
+                    btn_nueva_conv = gr.Button("Nueva conversación", size="sm", variant="primary", elem_id="nueva-conv", scale=0)
+                lista_conv = gr.Radio(choices=[], show_label=False, elem_id="lista-conv", container=False)
             with gr.Tab("Chat", id="chat"):
-                chat = gr.Chatbot(elem_id="chat", show_label=False, height="calc(100vh - 380px)", buttons=["copy"],
+                with gr.Row(elem_id="chat-acciones"):
+                    btn_nueva_chat = gr.Button("Nueva conversación", size="sm", elem_id="nueva-chat", scale=0)
+                chat = gr.Chatbot(elem_id="chat", show_label=False, height="calc(100vh - 430px)", buttons=["copy"],
                                   group_consecutive_messages=False, placeholder=PLACEHOLDER,
                                   avatar_images=(None, os.path.join(os.path.dirname(__file__), "icon.png")))
                 gr.HTML("<p id='chips-titulo'>Sugerencias</p>")
@@ -460,7 +555,10 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
         b.click(lambda h, st, q=q: agregar_pregunta(q, h, st), [chat, state], [msg, chat, pendiente], queue=False).then(
             responder, [pendiente, chat, state], chat)
     tab_noticias.select(ver_noticias, state, html_noticias)
-    tab_historial.select(ver_historial, state, html_historial)
+    tab_historial.select(lista_conversaciones, state, lista_conv)
+    lista_conv.input(abrir_conversacion, [lista_conv, state], [chat, state, tabs])
+    btn_nueva_conv.click(nueva_conversacion, state, [chat, state, tabs])
+    btn_nueva_chat.click(nueva_conversacion, state, [chat, state, tabs])
     tab_eventos.select(ver_eventos, state, html_eventos)
     tab_personal.select(ver_personal, state, html_personal).then(
         lambda st: gr.Column(visible=bool(st and st.get("token"))), state, seguridad).then(
