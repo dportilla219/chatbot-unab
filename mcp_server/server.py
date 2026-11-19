@@ -14,6 +14,7 @@ Rutas HTTP auxiliares (para n8n y la app Gradio):
   POST /rag/search        {"query": "...", "k": 5}
   POST /scrape            ejecuta el scraper de noticias
 """
+import json
 import os
 import re
 import unicodedata
@@ -116,7 +117,8 @@ def proyeccion_y_recomendaciones(id_estudiante: str) -> dict:
     recomendaciones para el éxito académico en tres ejes: investigación, autoaprendizaje y educación de precisión."""
     sid = _check_id(id_estudiante)
     proy = db.fetch_one("SELECT * FROM v_proyeccion_grado WHERE id_estudiante=%s", (sid,))
-    pend = _pendientes(sid)
+    pend = db.fetch_all("""SELECT * FROM v_asignaturas_pendientes WHERE id_estudiante=%s
+                           ORDER BY semestre_sugerido, asignatura""", (sid,))
     estado = proy["estado_academico"]
     max_cred = {"CONDICIONAL": 9, "PRUEBA_ACADEMICA": 99}.get(estado, 18)
     max_cursos = {"CONDICIONAL": 3, "PRUEBA_ACADEMICA": 2}.get(estado, 9)
@@ -325,6 +327,101 @@ async def historial_route(request: Request):
                            FROM chat_log WHERE id_estudiante = %s AND respuesta IS NOT NULL
                            ORDER BY id DESC LIMIT %s""", (a["estudiante"]["id_estudiante"], n))
     return JSONResponse({"ok": True, "mensajes": list(reversed(rows))})
+
+
+# ----------------------------------------------------------------- datos para las pestañas de la app
+_COLS_CACHE: dict = {}
+
+
+def _existe(tabla: str, columna: str | None = None) -> bool:
+    """Detecta si la migración 06 (profesores, certificados, contraseñas, sesiones) ya se aplicó."""
+    k = (tabla, columna)
+    if k not in _COLS_CACHE:
+        if columna:
+            r = db.fetch_one("""SELECT 1 AS ok FROM information_schema.columns
+                                WHERE table_schema='academico' AND table_name=%s AND column_name=%s""", (tabla, columna))
+        else:
+            r = db.fetch_one("""SELECT 1 AS ok FROM information_schema.tables
+                                WHERE table_schema='academico' AND table_name=%s""", (tabla,))
+        _COLS_CACHE[k] = bool(r)
+    return _COLS_CACHE[k]
+
+
+def _app_noticias():
+    return db.fetch_all("""SELECT titulo, to_char(fecha_pub,'YYYY-MM-DD') AS fecha, etiqueta, resumen, url
+                           FROM noticia ORDER BY fecha_pub DESC NULLS LAST LIMIT 20""")
+
+
+def _app_eventos():
+    return db.fetch_all("""SELECT actividad, categoria, dirigido_a, fuente,
+                                  to_char(fecha_inicio,'YYYY-MM-DD') AS inicio, to_char(fecha_fin,'YYYY-MM-DD') AS fin,
+                                  (fecha_inicio - CURRENT_DATE) AS dias
+                           FROM calendario_academico
+                           WHERE COALESCE(fecha_fin, fecha_inicio) >= CURRENT_DATE
+                           ORDER BY fecha_inicio LIMIT 25""")
+
+
+def _app_historial_chat(sid: str):
+    return db.fetch_all("""SELECT pregunta, respuesta, intencion,
+                                  to_char((creado AT TIME ZONE 'UTC') AT TIME ZONE 'America/Bogota','YYYY-MM-DD HH24:MI') AS fecha
+                           FROM chat_log WHERE id_estudiante=%s AND respuesta IS NOT NULL
+                           ORDER BY id DESC LIMIT 60""", (sid,))
+
+
+def _app_personal(sid: str):
+    prof = "h.profesor" if _existe("historial_academico", "profesor") else "NULL"
+    cursos = db.fetch_all(f"""SELECT h.cod_periodo AS periodo, p.descripcion AS periodo_txt, a.cod_asignatura AS codigo,
+                                     a.nombre AS asignatura, a.creditos, h.nota_final AS nota, h.estado, h.intento,
+                                     {prof} AS profesor
+                              FROM historial_academico h JOIN asignatura a USING (cod_asignatura)
+                              LEFT JOIN periodo p USING (cod_periodo)
+                              WHERE h.id_estudiante=%s ORDER BY h.cod_periodo, a.nombre""", (sid,))
+    certificados = db.fetch_all("""SELECT 'Competencias digitales' AS tipo, c.nombre, 'CCD UNAB' AS entidad,
+                                          ch.cod_periodo AS fecha, ch.via AS detalle, ch.nota
+                                   FROM ccd_historial ch JOIN ccd_curso c USING (cod_ccd)
+                                   WHERE ch.id_estudiante=%s AND ch.estado IN ('APROBADA','HOMOLOGADA')
+                                   ORDER BY ch.cod_periodo""", (sid,))
+    if _existe("certificado"):
+        certificados += db.fetch_all("""SELECT tipo, nombre, entidad, to_char(fecha,'YYYY-MM-DD') AS fecha, detalle, NULL AS nota
+                                        FROM certificado WHERE id_estudiante=%s ORDER BY fecha DESC""", (sid,))
+    est = db.fetch_one("SELECT semestre_actual, nivel_ingles FROM estudiante WHERE id_estudiante=%s", (sid,)) or {}
+    pend = db.fetch_all("""SELECT * FROM v_asignaturas_pendientes WHERE id_estudiante=%s
+                           ORDER BY semestre_sugerido, asignatura""", (sid,))
+    en_curso = [a for a in pend if a.get("en_curso")]
+    pend = [a for a in pend if not a.get("en_curso")]
+    por_sem: dict = {}
+    for a in pend:
+        sem = a.get("semestre_sugerido") or 0
+        clave = sem if sem >= (est.get("semestre_actual") or 1) else 0  # 0 = atrasadas
+        por_sem.setdefault(clave, []).append(a)
+    return {"cursos": cursos, "certificados": certificados, "nivel_ingles": est.get("nivel_ingles"),
+            "semestre_actual": est.get("semestre_actual"),
+            "en_curso": en_curso,
+            "pendientes_por_semestre": [{"semestre": k, "asignaturas": v} for k, v in sorted(por_sem.items())],
+            "tiene_profesores": prof != "NULL"}
+
+
+@mcp.custom_route("/app/datos", methods=["POST"])
+async def app_datos(request: Request):
+    """Datos de las pestañas de la app: noticias, eventos, historial (chat) y personal."""
+    if not _authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    b = await request.json()
+    seccion = b.get("seccion"); sid = (b.get("id_estudiante") or "").strip().upper()
+    try:
+        if seccion == "noticias":
+            data = _app_noticias()
+        elif seccion == "eventos":
+            data = _app_eventos()
+        elif seccion in ("historial", "personal"):
+            if not ID_RX.match(sid):
+                return JSONResponse({"error": "id inválido"}, status_code=400)
+            data = _app_historial_chat(sid) if seccion == "historial" else _app_personal(sid)
+        else:
+            return JSONResponse({"error": "sección desconocida"}, status_code=400)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=500)
+    return JSONResponse(json.loads(json.dumps({"ok": True, "datos": data}, default=str)))
 
 
 @mcp.custom_route("/embed", methods=["POST"])

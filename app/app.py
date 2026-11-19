@@ -12,10 +12,16 @@ import uuid
 import gradio as gr
 import requests
 
+import vistas
+
 N8N_CHAT_URL = os.getenv("N8N_CHAT_URL", "http://localhost:5678/webhook/chat-unab")
 API_URL = os.getenv("API_URL", "http://localhost:9000")
 API_TOKEN = os.getenv("API_TOKEN", "")
 HDR = {"X-API-Key": API_TOKEN} if API_TOKEN else {}
+# Botón "Entrar con perfil de prueba" (se apaga con DEMO_HABILITADO=0)
+DEMO_HABILITADO = os.getenv("DEMO_HABILITADO", "1") == "1"
+DEMO_NOMBRE = os.getenv("DEMO_NOMBRE", "Valentina Rojas Méndez")
+DEMO_ID = os.getenv("DEMO_ID", "U00174957")
 
 PROGRAMAS = ["Ingeniería de Sistemas", "Ingeniería Biomédica", "Ingeniería Industrial",
              "Ingeniería en Energía", "Ingeniería Mecatrónica", "Ingeniería Financiera"]
@@ -80,7 +86,8 @@ html, body { overflow-x: hidden !important; }
                  font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 #ficha .nombre { font-weight:700; color:var(--tinta); font-size:.95rem; line-height:1.2; }
 #ficha .detalle { color:var(--gris); font-size:.78rem; }
-#fila-ficha { align-items:center !important; padding:10px 14px !important; flex-wrap:nowrap !important; }
+#fila-ficha { align-items:center !important; padding:10px 14px !important; flex-wrap:nowrap !important;
+              border-top:4px solid var(--naranja) !important; }
 #fila-ficha > div:first-child { flex:1 1 auto !important; }
 #salir { max-width:110px; min-width:90px !important; }
 
@@ -110,10 +117,29 @@ html, body { overflow-x: hidden !important; }
                 color:var(--tinta) !important; font-size:.8rem !important; padding:6px 12px !important; box-shadow:none !important; }
 #chips button:hover { border-color:var(--naranja) !important; background:var(--naranja-claro) !important; }
 
+/* Pestañas: barra fija abajo, el chat en el centro */
+#tabs > .tab-wrapper, #tabs > div:first-child:not(.tabitem) { position:fixed !important; bottom:0; left:0; right:0; z-index:50;
+      background:#fff !important; border-top:1px solid var(--borde) !important; padding:6px 6px calc(6px + env(safe-area-inset-bottom)) !important;
+      box-shadow:0 -4px 14px rgba(17,24,39,.06); }
+#tabs [role="tablist"] { display:flex !important; justify-content:space-around !important; width:100% !important;
+      max-width:760px; margin:auto; gap:0 !important; border:none !important; overflow:visible !important; }
+#tabs [role="tab"] { flex:1 1 0 !important; font-size:.74rem !important; font-weight:600 !important; color:var(--gris) !important;
+      padding:8px 2px !important; border:none !important; border-radius:12px !important; background:transparent !important; min-width:0 !important; }
+#tabs [role="tab"][aria-selected="true"] { color:var(--naranja) !important; background:var(--naranja-claro) !important; }
+#tabs [role="tab"][aria-selected="true"]::after { display:none !important; }
+#tabs .tabitem { padding:0 !important; border:none !important; background:transparent !important; }
+#tabs .overflow-menu, #tabs .overflow-item-selected { display:none !important; }
+#tabs .tab-container.visually-hidden button { padding:2px 1px !important; font-size:.55rem !important; min-width:0 !important; }
+.gradio-container { padding-bottom:96px !important; }
+.recargar { max-width:140px; margin-left:auto; }
+
 /* Botón principal */
 button.primary { background: var(--naranja) !important; border:none !important; color:#fff !important; }
 button.primary:hover { background:#E5820B !important; }
+#demo-btn { background:#fff !important; border:1.5px dashed var(--morado) !important; color:var(--morado) !important; }
 """
+
+CSS = CSS + vistas.CSS_VISTAS
 
 HEADER = """<div id='barra'><div class='logo'>UNAB</div>
 <div><h1>Asistente Académico UNAB</h1>
@@ -150,6 +176,32 @@ def historial_previo(nombre, sid, programa, limite=10):
     return msgs
 
 
+def datos_app(seccion, state):
+    sid = (state or {}).get("id", "")
+    try:
+        r = requests.post(f"{API_URL}/app/datos", json={"seccion": seccion, "id_estudiante": sid},
+                          headers=HDR, timeout=20).json()
+        return r.get("datos") if r.get("ok") else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def ver_noticias(state):
+    return vistas.noticias(datos_app("noticias", state))
+
+
+def ver_eventos(state):
+    return vistas.eventos(datos_app("eventos", state))
+
+
+def ver_historial(state):
+    return vistas.historial(datos_app("historial", state)) if state else ""
+
+
+def ver_personal(state):
+    return vistas.personal(datos_app("personal", state)) if state else ""
+
+
 def login(nombre, sid, programa, state):
     try:
         r = requests.post(f"{API_URL}/auth", json={"nombre_completo": nombre, "id_estudiante": sid,
@@ -173,6 +225,10 @@ def login(nombre, sid, programa, state):
               "calendario académico, reglamento y noticias. ¿En qué te ayudo?")
     return (state, gr.update(visible=False), gr.update(visible=True), ficha_html(state),
             [{"role": "assistant", "content": saludo}], "")
+
+
+def login_demo(state):
+    return login(DEMO_NOMBRE, DEMO_ID, "Ingeniería de Sistemas", state)
 
 
 def agregar_pregunta(mensaje, historial, state):
@@ -212,8 +268,9 @@ def logout():
 with gr.Blocks(title="Asistente Académico UNAB") as demo:
     state = gr.State({})
     pendiente = gr.State("")
-    gr.HTML(HEADER)
 
+    with gr.Column(visible=True) as panel_login_wrap:
+        gr.HTML(HEADER)
     with gr.Column(visible=True, elem_id="login", elem_classes="tarjeta") as panel_login:
         gr.HTML("<h2>Inicia sesión</h2><p class='sub'>Ingresa tu nombre completo, tu ID estudiantil y tu carrera.</p>")
         nombre = gr.Textbox(label="Nombre completo", placeholder="Ej: Valentina Rojas Méndez", max_lines=1)
@@ -221,7 +278,8 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
         programa = gr.Dropdown(PROGRAMAS, value="Ingeniería de Sistemas", label="Carrera")
         error = gr.Markdown("")
         btn_login = gr.Button("Ingresar", variant="primary", size="lg")
-        with gr.Accordion("¿Probando la app? Usuarios de demostración", open=False):
+        btn_demo = gr.Button("Entrar con perfil de prueba", size="lg", elem_id="demo-btn", visible=DEMO_HABILITADO)
+        with gr.Accordion("Otros usuarios de demostración", open=False):
             gr.Markdown("- **Valentina Rojas Méndez** · U00174957 (estado normal)\n"
                         "- **Andrés Felipe Gómez Pardo** · U00160001 (condicional)\n"
                         "- **Laura Camila Suárez Díaz** · U00160002\n"
@@ -232,27 +290,44 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
         with gr.Row(elem_id="fila-ficha", elem_classes="tarjeta", equal_height=True):
             ficha = gr.HTML("", padding=False)
             btn_logout = gr.Button("Salir", size="sm", variant="secondary", elem_id="salir", scale=0)
-        chat = gr.Chatbot(elem_id="chat", show_label=False, height="58vh", buttons=["copy"],
-                          group_consecutive_messages=False, placeholder=PLACEHOLDER,
-                          avatar_images=(None, os.path.join(os.path.dirname(__file__), "icon.png")))
-        gr.HTML("<p id='chips-titulo'>Sugerencias</p>")
-        with gr.Row(elem_id="chips"):
-            botones = [gr.Button(e, size="sm") for e, _ in SUGERENCIAS]
-        with gr.Row(elem_id="entrada", equal_height=True):
-            msg = gr.Textbox(placeholder="Escribe tu pregunta…", show_label=False, scale=6, max_lines=4,
-                             container=False)
-            enviar = gr.Button("Enviar", variant="primary", scale=0, elem_id="enviar")
+        with gr.Tabs(selected="chat", elem_id="tabs") as tabs:
+            with gr.Tab("Noticias", id="noticias") as tab_noticias:
+                html_noticias = gr.HTML(padding=False)
+            with gr.Tab("Historial", id="historial") as tab_historial:
+                html_historial = gr.HTML(padding=False)
+            with gr.Tab("Chat", id="chat"):
+                chat = gr.Chatbot(elem_id="chat", show_label=False, height="calc(100vh - 380px)", buttons=["copy"],
+                                  group_consecutive_messages=False, placeholder=PLACEHOLDER,
+                                  avatar_images=(None, os.path.join(os.path.dirname(__file__), "icon.png")))
+                gr.HTML("<p id='chips-titulo'>Sugerencias</p>")
+                with gr.Row(elem_id="chips"):
+                    botones = [gr.Button(e, size="sm") for e, _ in SUGERENCIAS]
+                with gr.Row(elem_id="entrada", equal_height=True):
+                    msg = gr.Textbox(placeholder="Escribe tu pregunta…", show_label=False, scale=6, max_lines=4,
+                                     container=False)
+                    enviar = gr.Button("Enviar", variant="primary", scale=0, elem_id="enviar")
+            with gr.Tab("Eventos", id="eventos") as tab_eventos:
+                html_eventos = gr.HTML(padding=False)
+            with gr.Tab("Personal", id="personal") as tab_personal:
+                html_personal = gr.HTML(padding=False)
 
     salidas_login = [state, panel_login, panel_chat, ficha, chat, error]
-    btn_login.click(login, [nombre, sid, programa, state], salidas_login)
-    sid.submit(login, [nombre, sid, programa, state], salidas_login)
+    cab = dict(fn=lambda st: gr.Column(visible=not bool(st)), inputs=state, outputs=panel_login_wrap)
+    al_entrar = dict(fn=lambda: gr.Tabs(selected="chat"), outputs=tabs)
+    btn_login.click(login, [nombre, sid, programa, state], salidas_login).then(**al_entrar).then(**cab)
+    sid.submit(login, [nombre, sid, programa, state], salidas_login).then(**al_entrar).then(**cab)
+    btn_demo.click(login_demo, [state], salidas_login).then(**al_entrar).then(**cab)
     for disparador in (enviar.click, msg.submit):
         disparador(agregar_pregunta, [msg, chat, state], [msg, chat, pendiente], queue=False).then(
             responder, [pendiente, chat, state], chat)
     for b, (_, q) in zip(botones, SUGERENCIAS):
         b.click(lambda h, st, q=q: agregar_pregunta(q, h, st), [chat, state], [msg, chat, pendiente], queue=False).then(
             responder, [pendiente, chat, state], chat)
-    btn_logout.click(logout, None, salidas_login)
+    tab_noticias.select(ver_noticias, state, html_noticias)
+    tab_historial.select(ver_historial, state, html_historial)
+    tab_eventos.select(ver_eventos, state, html_eventos)
+    tab_personal.select(ver_personal, state, html_personal)
+    btn_logout.click(logout, None, salidas_login).then(**cab)
 
 
 if __name__ == "__main__":
