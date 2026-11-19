@@ -4,12 +4,12 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Scraper periódico de noticias UNAB\nCada 6 h consulta la API pública de WordPress de unab.edu.co (Estudiantes, Ing. Sistemas, Facultad de Ingeniería) → limpia y etiqueta (CURSOS/CONVOCATORIA/CERTIFICACION/CCD) → upsert en academico.noticia → embeddings para RAG",
-        "height": 170,
-        "width": 560,
+        "content": "## Scraper periódico de noticias\nCada 6 h: (1) API pública de WordPress de unab.edu.co (Estudiantes, Ing. Sistemas, Facultad de Ingeniería) y (2) noticias del día por RSS: Google News (educación, tecnología, ingeniería de sistemas) y ENTER.CO → limpia, etiqueta (CURSOS/CONVOCATORIA/CERTIFICACION/CCD) y clasifica por tema con fuente y fecha → upsert en academico.noticia → embeddings para RAG",
+        "height": 190,
+        "width": 620,
         "color": 5
       },
-      "id": "3fc67b55-e683-4c54-a170-80607a5d763e",
+      "id": "37addb55-944a-4423-869e-7f483e24f44e",
       "name": "Nota 0",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -29,7 +29,7 @@
           ]
         }
       },
-      "id": "82088161-1202-4d9f-828e-dcc300d73e4c",
+      "id": "bce3c93b-8c78-4911-bb12-e984b698da91",
       "name": "Cada 6 horas",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
@@ -40,7 +40,7 @@
     },
     {
       "parameters": {},
-      "id": "92790b3d-332b-4e1c-bf70-5105bee1d25c",
+      "id": "0c906bf3-38d2-4f2e-9ecc-c292a6312b36",
       "name": "Ejecutar manualmente",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
@@ -53,7 +53,7 @@
       "parameters": {
         "jsCode": "\nreturn [232, 556, 134].map(c => ({ json: { categoria: c } }));\n"
       },
-      "id": "3a77be2e-4ff1-438b-83a1-8ba69ab4b9bb",
+      "id": "a0505d40-47d5-4679-bcc3-e08db1084fc2",
       "name": "Categorías a consultar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -100,7 +100,7 @@
           }
         }
       },
-      "id": "98bc74b3-9912-48b9-9cf8-b665773112ed",
+      "id": "5802dc77-235d-4f24-b5ae-34195da6922e",
       "name": "GET unab.edu.co wp-json",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -114,7 +114,7 @@
       "parameters": {
         "jsCode": "\nconst limpiar = h => String(h || '').replace(/<\\/(p|li|h\\d|tr)>/gi, '\\n').replace(/<br\\s*\\/?>/gi, '\\n').replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#8217;|&#8216;/g, \"'\").replace(/&#8220;|&#8221;|&quot;/g, '\"').replace(/&#8211;/g, '–')\n  .replace(/&#\\d+;/g, ' ').replace(/[ \\t]+/g, ' ').replace(/\\n\\s*\\n+/g, '\\n\\n').trim();\nconst reglas = [['CCD', /competencias digitales|\\bccd\\b|insignia|interacci[oó]n digital/i], ['CERTIFICACION', /certificaci[oó]n|certificado|examen|celpe|toefl|ielts|prueba de/i],\n  ['CONVOCATORIA', /convocatoria|inscripci|elecciones|beca|postula|abiertas/i], ['CURSOS', /curso|diplomado|taller|vacacional|intensivo|capacitaci/i]];\nconst temaDe = t => /ingenier[ií]a de sistemas|software|programaci|desarrollador|inteligencia artificial|\\bIA\\b|ciberseguridad|\\bdatos\\b|algoritm|computaci|\\bnube\\b|cloud/i.test(t) ? 'Ingeniería de Sistemas'\n  : /tecnolog|digital|internet|\\bapp\\b|innovaci|\\b5g\\b|startup|robot/i.test(t) ? 'Tecnología'\n  : /educaci|universidad|estudiant|beca|icetex|acad[eé]mic|docente|pregrado|posgrado/i.test(t) ? 'Educación' : 'Institucional';\nconst vistos = new Set(); const out = [];\nfor (const it of $input.all()) {\n  const p = it.json; if (!p || !p.id || vistos.has(p.id)) continue; vistos.add(p.id);\n  const titulo = limpiar(p.title?.rendered), contenido = limpiar(p.content?.rendered);\n  const base = (titulo + ' ' + contenido.slice(0, 600));\n  const etiqueta = (reglas.find(([, rx]) => rx.test(base)) || ['GENERAL'])[0];\n  out.push({ json: { id_wp: p.id, titulo, url: p.link, fecha_pub: p.date, resumen: limpiar(p.excerpt?.rendered).slice(0, 500),\n    contenido, categorias: (p.categories || []).join(','), etiqueta, fuente: 'unab.edu.co',\n    tema: temaDe(titulo + ' ' + contenido.slice(0, 600)) } });\n}\nreturn out;\n"
       },
-      "id": "a0757740-abea-4e4b-bd8a-9c99e1f2e09a",
+      "id": "14d5a82e-d76e-4048-8181-01beb7b821d7",
       "name": "Limpiar y etiquetar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -131,7 +131,7 @@
           "queryReplacement": "={{ [ $json.id_wp, $json.titulo, $json.url, $json.fecha_pub, $json.resumen, $json.contenido, $json.categorias, $json.etiqueta, $json.fuente, $json.tema ] }}"
         }
       },
-      "id": "76f6ebbe-e637-4e93-9faa-297850a410bb",
+      "id": "4805b604-028d-4e75-9344-01509671c920",
       "name": "Upsert noticia",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -157,7 +157,7 @@
           },
           "conditions": [
             {
-              "id": "5252039e-d690-4a2b-968b-e8f8fd84482c",
+              "id": "af3ca905-68d7-496f-98a0-17264cdb0188",
               "leftValue": "={{ $json.es_nueva }}",
               "rightValue": true,
               "operator": {
@@ -171,7 +171,7 @@
         },
         "options": {}
       },
-      "id": "bbc540ed-79e9-40d2-ab93-6c23948e8c75",
+      "id": "f2977ecc-b79a-48cd-9dec-35867f864a4e",
       "name": "¿Es nueva?",
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.2,
@@ -200,7 +200,7 @@
           "timeout": 60000
         }
       },
-      "id": "d8001704-16da-4ffa-9d0a-c3f04ce14f43",
+      "id": "80bd7044-d097-42d9-8017-cd486eb07cf2",
       "name": "Embeddings noticia",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -217,7 +217,7 @@
           "queryReplacement": "={{ [ $('¿Es nueva?').item.json.titulo, $('¿Es nueva?').item.json.etiqueta, '[Noticia ' + ($('¿Es nueva?').item.json.fuente || 'unab.edu.co') + ' ' + String($('¿Es nueva?').item.json.fecha_pub).slice(0,10) + ' - ' + $('¿Es nueva?').item.json.titulo + '] ' + String($('¿Es nueva?').item.json.contenido).slice(0,1500), $('¿Es nueva?').item.json.url, $json.pgvector[0] ] }}"
         }
       },
-      "id": "e0d78eb9-5cf8-47ad-87e7-ffb40bbf221b",
+      "id": "c327dc75-2c79-4133-a09a-dae4155a509a",
       "name": "Guardar noticia en PGVector",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -236,7 +236,7 @@
       "parameters": {
         "jsCode": "\n// Noticias del día de educación, tecnología e ingeniería de sistemas (Google News, últimos 2 días) + ENTER.CO\nconst gn = q => 'https://news.google.com/rss/search?q=' + encodeURIComponent(q + ' when:2d') + '&hl=es-419&gl=CO&ceid=CO:es-419';\nreturn [\n  { json: { url: gn('educación superior Colombia universidades'), tema: 'Educación' } },\n  { json: { url: gn('tecnología Colombia'), tema: 'Tecnología' } },\n  { json: { url: gn('\"ingeniería de sistemas\" OR \"desarrollo de software\" OR \"inteligencia artificial\" Colombia'), tema: 'Ingeniería de Sistemas' } },\n  { json: { url: 'https://www.enter.co/feed/', tema: 'Tecnología' } },\n];\n"
       },
-      "id": "a4a6186f-95a1-4a07-b0fa-c83c2d5f0ada",
+      "id": "0cae0d8f-f36e-4245-a993-5df0e36b136a",
       "name": "Fuentes externas (RSS)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -267,7 +267,7 @@
           }
         }
       },
-      "id": "3ab5d0eb-89aa-4726-85f6-a3ba9705da70",
+      "id": "226b5a53-6a48-4e38-ba66-04c4f9be90e1",
       "name": "GET feeds RSS",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -281,7 +281,7 @@
       "parameters": {
         "jsCode": "\nconst temaDe = t => /ingenier[ií]a de sistemas|software|programaci|desarrollador|inteligencia artificial|\\bIA\\b|ciberseguridad|\\bdatos\\b|algoritm|computaci|\\bnube\\b|cloud/i.test(t) ? 'Ingeniería de Sistemas'\n  : /tecnolog|digital|internet|\\bapp\\b|innovaci|\\b5g\\b|startup|robot/i.test(t) ? 'Tecnología'\n  : /educaci|universidad|estudiant|beca|icetex|acad[eé]mic|docente|pregrado|posgrado/i.test(t) ? 'Educación' : 'Institucional';\nconst txt = (x, tag) => { const m = x.match(new RegExp('<' + tag + '[^>]*>([\\\\s\\\\S]*?)</' + tag + '>', 'i')); return m ? m[1] : ''; };\nconst limpia = h => String(h || '').replace(/<!\\[CDATA\\[|\\]\\]>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '\"')\n  .replace(/&#39;|&#8217;|&#8216;/g, \"'\").replace(/&#8220;|&#8221;/g, '\"').replace(/&nbsp;|&#160;/g, ' ').replace(/&#\\d+;/g, ' ').replace(/\\s+/g, ' ').trim();\nconst fnv = (s, seed) => { let h = seed >>> 0; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; };\nconst idDe = url => -((fnv(url, 2166136261) % 1048576) * 4294967296 + fnv(url, 33554467));   // id negativo: no choca con WordPress\nconst desde = Date.now() - 3 * 86400000, vistos = new Set(), out = [];\nconst fuentes = $('Fuentes externas (RSS)').all();\n$input.all().forEach((it, i) => {\n  const xml = String(it.json.xml || ''); const temaFeed = (fuentes[i] || fuentes[0]).json.tema;\n  const items = xml.split(/<item[\\s>]/i).slice(1, 9);\n  for (const raw of items) {\n    let titulo = limpia(txt(raw, 'title')); const link = limpia(txt(raw, 'link'));\n    const fecha = new Date(limpia(txt(raw, 'pubDate')));\n    if (!titulo || !link || isNaN(fecha) || fecha.getTime() < desde || vistos.has(link)) continue;\n    vistos.add(link);\n    let fuente = limpia(txt(raw, 'source'));\n    if (!fuente) { try { fuente = new URL(link).hostname.replace(/^www\\./, ''); } catch (e) { fuente = 'RSS'; } }\n    if (titulo.endsWith(' - ' + fuente)) titulo = titulo.slice(0, -(fuente.length + 3));\n    let resumen = limpia(txt(raw, 'description')).replace(titulo, '').replace(fuente, '').trim().slice(0, 400);\n    if (resumen.length < 25) resumen = titulo;\n    const tema = temaDe(titulo + ' ' + resumen) === 'Institucional' ? temaFeed : temaDe(titulo + ' ' + resumen);\n    out.push({ json: { id_wp: idDe(link), titulo, url: link, fecha_pub: fecha.toISOString(), resumen, contenido: resumen,\n      categorias: 'RSS', etiqueta: /convocatoria|beca|inscripci/i.test(titulo) ? 'CONVOCATORIA' : /curso|diplomado|taller|bootcamp/i.test(titulo) ? 'CURSOS' : /certificaci/i.test(titulo) ? 'CERTIFICACION' : 'GENERAL',\n      fuente: fuente.slice(0, 80), tema } });\n  }\n});\nreturn out.slice(0, 30);\n"
       },
-      "id": "65646773-5939-4c91-ab71-a556f32cd872",
+      "id": "c2c98343-f5c4-4d0c-ac8a-24c149383622",
       "name": "Parsear RSS",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

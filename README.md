@@ -455,6 +455,10 @@ Cada noticia se guarda con **título, fecha, fuente, tema** (`Educación`, `Tecn
 
 **Integración:** el agente las consulta con la herramienta MCP `noticias_recientes` (filtra por tema o etiqueta y cita fuente y fecha), y la app las muestra en la pestaña **Noticias** con filtro por tema, la marca **Hoy** y el enlace a la fuente original.
 
+**Ejecución real del workflow 04 en el servidor** (19 de noviembre de 2026): la rama de unab.edu.co trajo 22 noticias y la de RSS 30 noticias del día; de las 52 guardadas, 30 eran nuevas y se vectorizaron para el RAG:
+
+![Workflow 04 ejecutado](docs/capturas/n8n_06_scraper_rss.png)
+
 ![Noticias por tema](docs/capturas/app_noticias_temas.png)
 
 ## 10. Aplicación Android (Gradio)

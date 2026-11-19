@@ -452,9 +452,10 @@ r.save("01_rag_ingesta_embeddings.json")
 # 3) SCRAPER DE NOTICIAS (programado)
 # =====================================================================================
 s = WF("UNAB Chatbot - 04 Scraper de noticias (programado)", "unabScraperNews1")
-s.note("## Scraper periódico de noticias UNAB\nCada 6 h consulta la API pública de WordPress de unab.edu.co "
-       "(Estudiantes, Ing. Sistemas, Facultad de Ingeniería) → limpia y etiqueta (CURSOS/CONVOCATORIA/CERTIFICACION/CCD) → "
-       "upsert en academico.noticia → embeddings para RAG", [-260, -280], 560, 170, 5)
+s.note("## Scraper periódico de noticias\nCada 6 h: (1) API pública de WordPress de unab.edu.co (Estudiantes, Ing. Sistemas, "
+       "Facultad de Ingeniería) y (2) noticias del día por RSS: Google News (educación, tecnología, ingeniería de sistemas) "
+       "y ENTER.CO → limpia, etiqueta (CURSOS/CONVOCATORIA/CERTIFICACION/CCD) y clasifica por tema con fuente y fecha → "
+       "upsert en academico.noticia → embeddings para RAG", [-260, -280], 620, 190, 5)
 s.add("Cada 6 horas", "n8n-nodes-base.scheduleTrigger", 1.2,
       {"rule": {"interval": [{"field": "hours", "hoursInterval": 6}]}}, [-240, -40])
 s.add("Ejecutar manualmente", "n8n-nodes-base.manualTrigger", 1, {}, [-240, 140])
