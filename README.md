@@ -394,7 +394,10 @@ Pruebas listas para correr:
 - `bash deploy/probar_webhook.sh` en la EC2: salud del servidor, inicio de sesión, búsqueda RAG, webhook sin clave (rechazado) y dos preguntas reales al webhook (una normal y un intento de manipulación).
 - `docs/postman_coleccion.json`: colección de Postman con el webhook y todas las rutas (importar y poner la variable `api_key`).
 
-<!-- EVIDENCIA_WEBHOOK -->
+**Evidencia: salida real de `bash deploy/probar_webhook.sh` en la EC2** (19 de noviembre de 2026). Se ven la salud del servidor (300 estudiantes, 450 fragmentos, 23 noticias), el inicio de sesión, la búsqueda RAG que recupera los Art. 11 y 86 del Reglamento, el webhook rechazando una llamada sin clave, una respuesta personalizada con datos reales del estudiante (ruta `historial_personal`) y el guardrail bloqueando un intento de manipulación:
+
+![Prueba del webhook 1](docs/capturas/evidencia_webhook_1.png)
+![Prueba del webhook 2](docs/capturas/evidencia_webhook_2.png)
 
 **Cliente MCP con Claude** (`mcp_server/cliente_mcp_claude.py`): se conecta al servidor por HTTP streamable, descubre las herramientas, se las ofrece a Claude y ejecuta las llamadas que Claude decida.
 ```bash
