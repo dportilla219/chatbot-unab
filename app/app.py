@@ -95,6 +95,7 @@ html, body { overflow-x: hidden !important; }
 #appbar .sello { background:linear-gradient(120deg, var(--naranja), var(--morado)); color:#fff; font-size:.62rem;
                  letter-spacing:.5px; padding:5px 7px; border-radius:8px; }
 #ficha-personal { margin-bottom:4px; }
+#mis-eventos { padding:6px 12px !important; margin-bottom:8px !important; border-color:#D9C4F7 !important; }
 #ficha-personal #ficha { background:#fff; border:1px solid var(--borde); border-radius:14px; padding:12px 14px; }
 #salir { margin-top:10px !important; background:#fff !important; border:1px solid #F3C2C2 !important; color:#B42318 !important; }
 
@@ -238,7 +239,38 @@ def ver_noticias(state):
 
 
 def ver_eventos(state):
-    return vistas.eventos(datos_app("eventos", state))
+    datos = datos_app("eventos", state)
+    activos = bool(config_servidor().get("eventos_personales"))
+    propios = [(f"{e['inicio']} · {e['actividad']}", e["id"]) for e in (datos or []) if e.get("origen") == "personal"]
+    return (vistas.eventos(datos), gr.Column(visible=activos and bool(state)),
+            gr.update(choices=propios, value=None))
+
+
+def guardar_evento(nombre, fecha, descripcion, state):
+    if not state:
+        return "Inicia sesión primero.", gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+    fecha = str(fecha or "")[:10]
+    try:
+        r = requests.post(f"{API_URL}/app/eventos", json={"id_estudiante": state["id"], "nombre": nombre, "fecha": fecha,
+                                                           "descripcion": descripcion}, headers=HDR, timeout=15).json()
+    except Exception as e:  # noqa: BLE001
+        r = {"ok": False, "mensaje": f"No se pudo conectar con el servidor ({e.__class__.__name__})."}
+    html, vis, lista = ver_eventos(state)
+    if r.get("ok"):
+        return r["mensaje"], html, vis, lista, "", None, ""
+    return r.get("mensaje", "No se pudo guardar."), html, vis, lista, gr.update(), gr.update(), gr.update()
+
+
+def eliminar_evento(ev_id, state):
+    if not state or not ev_id:
+        return "Elige un evento de la lista.", gr.update(), gr.update(), gr.update()
+    try:
+        r = requests.post(f"{API_URL}/app/eventos", json={"id_estudiante": state["id"], "accion": "eliminar", "id": ev_id},
+                          headers=HDR, timeout=15).json()
+    except Exception as e:  # noqa: BLE001
+        r = {"ok": False, "mensaje": f"No se pudo conectar con el servidor ({e.__class__.__name__})."}
+    html, vis, lista = ver_eventos(state)
+    return r.get("mensaje", ""), html, vis, lista
 
 
 def _nueva_conv(sid):
@@ -526,6 +558,18 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
                                      container=False)
                     enviar = gr.Button("Enviar", variant="primary", scale=0, elem_id="enviar")
             with gr.Tab("Eventos", id="eventos") as tab_eventos:
+                with gr.Column(visible=False, elem_classes="tarjeta", elem_id="mis-eventos") as panel_eventos:
+                    with gr.Accordion("Agregar un evento personal", open=False):
+                        ev_nombre = gr.Textbox(label="Nombre", placeholder="Ej: Parcial de Bases de Datos", max_lines=1)
+                        ev_fecha = gr.DateTime(label="Fecha", include_time=False, type="string")
+                        ev_desc = gr.Textbox(label="Descripción", placeholder="Opcional: salón, temas, recordatorios…",
+                                             lines=2, max_lines=4)
+                        ev_msg = gr.Markdown("")
+                        ev_guardar = gr.Button("Guardar evento", variant="primary")
+                        gr.HTML("<p class='nota' style='text-align:left'>Solo tú puedes ver tus eventos.</p>")
+                    with gr.Accordion("Eliminar uno de mis eventos", open=False):
+                        ev_lista = gr.Dropdown(label="Mis eventos", choices=[])
+                        ev_borrar = gr.Button("Eliminar evento", size="sm")
                 html_eventos = gr.HTML(padding=False)
             with gr.Tab("Personal", id="personal") as tab_personal:
                 ficha = gr.HTML("", padding=False, elem_id="ficha-personal")
@@ -567,7 +611,10 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
     lista_conv.input(abrir_conversacion, [lista_conv, state], [chat, state, tabs])
     btn_nueva_conv.click(nueva_conversacion, state, [chat, state, tabs])
     btn_nueva_chat.click(nueva_conversacion, state, [chat, state, tabs])
-    tab_eventos.select(ver_eventos, state, html_eventos)
+    tab_eventos.select(ver_eventos, state, [html_eventos, panel_eventos, ev_lista])
+    ev_guardar.click(guardar_evento, [ev_nombre, ev_fecha, ev_desc, state],
+                     [ev_msg, html_eventos, panel_eventos, ev_lista, ev_nombre, ev_fecha, ev_desc])
+    ev_borrar.click(eliminar_evento, [ev_lista, state], [ev_msg, html_eventos, panel_eventos, ev_lista])
     tab_personal.select(ver_personal, state, html_personal).then(
         lambda st: gr.Column(visible=bool(st and st.get("token"))), state, seguridad).then(
         sesiones, state, [lista_ses, msg_ses])

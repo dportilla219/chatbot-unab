@@ -28,6 +28,11 @@ CSS_VISTAS = """
 .fecha-box .d { font-size:1.2rem; font-weight:800; color:#B45309; line-height:1; }
 .fecha-box .m { font-size:.68rem; font-weight:700; color:#B45309; text-transform:uppercase; }
 .evento { display:flex; gap:12px; align-items:flex-start; }
+.evento.propio { border-color:#D9C4F7; background:linear-gradient(0deg, #FBF8FF, #FBF8FF); border-left:4px solid var(--morado); }
+.evento.propio .fecha-box { background:var(--morado-claro); }
+.evento.propio .fecha-box .d, .evento.propio .fecha-box .m { color:var(--morado); }
+.leyenda { display:flex; gap:14px; font-size:.75rem; color:var(--gris); padding:0 4px; }
+.leyenda i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
 details.grupo { background:#fff; border:1px solid var(--borde); border-radius:14px; padding:0; overflow:hidden; }
 details.grupo > summary { cursor:pointer; list-style:none; padding:12px 14px; font-weight:700; color:var(--tinta);
                           display:flex; justify-content:space-between; align-items:center; font-size:.92rem; }
@@ -72,8 +77,9 @@ def noticias(datos):
 
 def eventos(datos):
     if not datos:
-        return _vacio("No hay eventos próximos en el calendario académico.")
-    out = ["<div class='vista'>"]
+        return _vacio("No hay eventos próximos. Puedes agregar los tuyos con el botón de arriba.")
+    out = ["<div class='vista'><div class='leyenda'><span><i style='background:var(--naranja)'></i>Calendario UNAB</span>"
+           "<span><i style='background:var(--morado)'></i>Mis eventos</span></div>"]
     for e in datos:
         a, m, d = (e["inicio"] or "----------").split("-")
         dias = e.get("dias")
@@ -84,12 +90,18 @@ def eventos(datos):
         else:
             cuando = "en curso"
         rango = e["inicio"] + (f" al {e['fin']}" if e.get("fin") and e["fin"] != e["inicio"] else "")
-        out.append(f"<div class='item evento'><div class='fecha-box'><div class='d'>{int(d)}</div>"
+        propio = e.get("origen") == "personal"
+        if propio:
+            detalle = (f"<div class='texto'>{escape(e['descripcion'])}</div>" if e.get("descripcion") else "")
+            etq = "<span class='etq'>Personal</span>"
+        else:
+            detalle = f"<div class='meta'>{escape(e.get('categoria') or '')} · {escape(e.get('dirigido_a') or '')}</div>"
+            etq = ""
+        out.append(f"<div class='item evento{' propio' if propio else ''}'><div class='fecha-box'><div class='d'>{int(d)}</div>"
                    f"<div class='m'>{_MESES[int(m) - 1]}</div></div><div>"
                    f"<div class='titulo'>{escape(e['actividad'])}</div>"
-                   f"<div class='meta'><span class='etq nar'>{escape(cuando)}</span>{escape(rango)}</div>"
-                   f"<div class='meta'>{escape(e.get('categoria') or '')} · {escape(e.get('dirigido_a') or '')}</div>"
-                   f"</div></div>")
+                   f"<div class='meta'>{etq}<span class='etq nar'>{escape(cuando)}</span>{escape(rango)}</div>"
+                   f"{detalle}</div></div>")
     return "".join(out) + "</div>"
 
 

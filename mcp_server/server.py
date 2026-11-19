@@ -352,6 +352,7 @@ async def auth_config(request: Request):
     if not _authorized(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     return JSONResponse({"password": _existe("acceso"), "sesiones": _existe("sesion"),
+                         "eventos_personales": _existe("evento_personal"),
                          "demo": DEMO_HABILITADO})
 
 
@@ -494,13 +495,51 @@ def _app_noticias():
                            FROM noticia ORDER BY fecha_pub DESC NULLS LAST LIMIT 20""")
 
 
-def _app_eventos():
-    return db.fetch_all("""SELECT actividad, categoria, dirigido_a, fuente,
+def _app_eventos(sid: str = ""):
+    unab = db.fetch_all("""SELECT 'unab' AS origen, NULL::bigint AS id, actividad, categoria, dirigido_a, fuente,
+                                  NULL AS descripcion,
                                   to_char(fecha_inicio,'YYYY-MM-DD') AS inicio, to_char(fecha_fin,'YYYY-MM-DD') AS fin,
                                   (fecha_inicio - CURRENT_DATE) AS dias
                            FROM calendario_academico
                            WHERE COALESCE(fecha_fin, fecha_inicio) >= CURRENT_DATE
                            ORDER BY fecha_inicio LIMIT 25""")
+    propios = []
+    if sid and ID_RX.match(sid) and _existe("evento_personal"):
+        propios = db.fetch_all("""SELECT 'personal' AS origen, id, nombre AS actividad, 'Personal' AS categoria,
+                                         NULL AS dirigido_a, NULL AS fuente, descripcion,
+                                         to_char(fecha,'YYYY-MM-DD') AS inicio, NULL AS fin, (fecha - CURRENT_DATE) AS dias
+                                  FROM evento_personal WHERE id_estudiante=%s AND fecha >= CURRENT_DATE
+                                  ORDER BY fecha LIMIT 50""", (sid,))
+    return sorted(unab + propios, key=lambda e: (e["inicio"] or "", e["origen"] != "personal"))
+
+
+@mcp.custom_route("/app/eventos", methods=["POST"])
+async def app_eventos_personales(request: Request):
+    """Crea o elimina un evento personal. Solo el dueño (id_estudiante) puede verlo o borrarlo."""
+    if not _authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if not _existe("evento_personal"):
+        return JSONResponse({"ok": False, "mensaje": "Los eventos personales todavía no están activados en el servidor."})
+    b = await _json(request)
+    sid = (b.get("id_estudiante") or "").strip().upper()
+    if not ID_RX.match(sid):
+        return JSONResponse({"ok": False, "mensaje": "ID inválido."}, status_code=400)
+    if b.get("accion") == "eliminar":
+        n = db.execute("DELETE FROM evento_personal WHERE id=%s AND id_estudiante=%s", (int(b.get("id") or 0), sid))
+        return JSONResponse({"ok": n > 0, "mensaje": "Evento eliminado." if n else "No se encontró el evento."})
+    nombre = " ".join(str(b.get("nombre") or "").split())[:120]
+    desc = str(b.get("descripcion") or "").strip()[:500]
+    fecha = str(b.get("fecha") or "")[:10]
+    if not nombre:
+        return JSONResponse({"ok": False, "mensaje": "Escribe un nombre para el evento."})
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", fecha):
+        return JSONResponse({"ok": False, "mensaje": "Elige una fecha válida."})
+    try:
+        db.execute("INSERT INTO evento_personal (id_estudiante, nombre, fecha, descripcion) VALUES (%s, %s, %s, %s)",
+                   (sid, nombre, fecha, desc or None))
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"ok": False, "mensaje": "La fecha no es válida."})
+    return JSONResponse({"ok": True, "mensaje": "Evento agregado."})
 
 
 def _app_historial_chat(sid: str):
@@ -571,7 +610,7 @@ async def app_datos(request: Request):
         if seccion == "noticias":
             data = _app_noticias()
         elif seccion == "eventos":
-            data = _app_eventos()
+            data = _app_eventos(sid)
         elif seccion in ("historial", "personal", "conversaciones", "conversacion"):
             if not ID_RX.match(sid):
                 return JSONResponse({"error": "id inválido"}, status_code=400)
