@@ -317,7 +317,19 @@ flowchart LR
 
 **Recuperación demostrada con consultas reales** (ruta pública `GET /evidencias` del servidor MCP; los resultados completos se ven en `https://mcp.3-222-163-239.sslip.io/evidencias`):
 
-<!-- EVIDENCIA_RAG -->
+Resultados reales del servidor en AWS (19 de noviembre de 2026, 23:28 UTC). La columna *Consulta expandida* muestra lo que agrega el glosario de jerga; el puntaje es la fusión RRF, `1/(60 + posición vectorial) + 1/(60 + posición por texto)`:
+
+| Consulta del estudiante | Consulta expandida (glosario) | Top 3 recuperado | Puntaje RRF |
+|---|---|---|---|
+| ¿Qué pasa si quedo en prueba académica? | + "prueba académica, Programa de Recuperación Académica" | Reglamento **Art. 86** (solicitud al Programa de Recuperación) · **Art. 86** · **Art. 87** (cómo se aprueba) | 0.028 · 0.025 · 0.025 |
+| ¿Cuántas fallas puedo tener antes de perder una materia? | + "reprobar un curso…; fallas por inasistencia (20 %)" | Reglamento **Art. 46** (20 % de fallas = pierde el curso) · **Art. 47** (habilitaciones) · Art. 89 | 0.028 · 0.025 · 0.021 |
+| requisitos para graduarse de ingeniería de sistemas | + "requisitos de grado (Art. 67)" | Plan de estudios (créditos y componentes) · Preguntas frecuentes CCD (**Art. 6 y 67 literal c**) · noticia del plan 2026 | 0.028 · 0.028 · 0.027 |
+| ¿Qué es la insignia de competencias digitales? | — | Noticia CCD 2026-09-29 (tres rutas) · documento CCD (insignia al graduarse) · noticia de cursos vacacionales CCD | 0.044 · 0.042 · 0.028 |
+| que formas hay de quedar PFU | + "PFU = quedar por fuera de la universidad: Fuera del Programa, PGA inferior a 3.00…" | Reglamento **Art. 12** (causas de pérdida de matrícula) · **Art. 85** · **Art. 87** | 0.029 · 0.029 · 0.028 |
+
+Base vectorial: 300 fragmentos del Reglamento (467 caracteres en promedio, máximo 628), 58 del CCD, 18 del plan de estudios y 74 de noticias, para 450 en total.
+
+**Efecto del glosario:** antes de aplicar el glosario también en el servidor MCP, "¿Cuántas fallas puedo tener…?" no recuperaba el Art. 46 y "quedar PFU" traía fragmentos del CCD sin relación. Con la expansión, los dos recuperan los artículos correctos del Reglamento.
 
 ## 6. Workflows de n8n
 
