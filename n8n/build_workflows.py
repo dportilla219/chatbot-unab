@@ -474,6 +474,9 @@ const limpiar = h => String(h || '').replace(/<\/(p|li|h\d|tr)>/gi, '\n').replac
   .replace(/&#\d+;/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n\n').trim();
 const reglas = [['CCD', /competencias digitales|\bccd\b|insignia|interacci[oó]n digital/i], ['CERTIFICACION', /certificaci[oó]n|certificado|examen|celpe|toefl|ielts|prueba de/i],
   ['CONVOCATORIA', /convocatoria|inscripci|elecciones|beca|postula|abiertas/i], ['CURSOS', /curso|diplomado|taller|vacacional|intensivo|capacitaci/i]];
+const temaDe = t => /ingenier[ií]a de sistemas|software|programaci|desarrollador|inteligencia artificial|\bIA\b|ciberseguridad|\bdatos\b|algoritm|computaci|\bnube\b|cloud/i.test(t) ? 'Ingeniería de Sistemas'
+  : /tecnolog|digital|internet|\bapp\b|innovaci|\b5g\b|startup|robot/i.test(t) ? 'Tecnología'
+  : /educaci|universidad|estudiant|beca|icetex|acad[eé]mic|docente|pregrado|posgrado/i.test(t) ? 'Educación' : 'Institucional';
 const vistos = new Set(); const out = [];
 for (const it of $input.all()) {
   const p = it.json; if (!p || !p.id || vistos.has(p.id)) continue; vistos.add(p.id);
@@ -481,17 +484,18 @@ for (const it of $input.all()) {
   const base = (titulo + ' ' + contenido.slice(0, 600));
   const etiqueta = (reglas.find(([, rx]) => rx.test(base)) || ['GENERAL'])[0];
   out.push({ json: { id_wp: p.id, titulo, url: p.link, fecha_pub: p.date, resumen: limpiar(p.excerpt?.rendered).slice(0, 500),
-    contenido, categorias: (p.categories || []).join(','), etiqueta } });
+    contenido, categorias: (p.categories || []).join(','), etiqueta, fuente: 'unab.edu.co',
+    tema: temaDe(titulo + ' ' + contenido.slice(0, 600)) } });
 }
 return out;
 """, [420, 40])
 pg_query(s, "Upsert noticia", """
-INSERT INTO academico.noticia (id_wp, titulo, url, fecha_pub, resumen, contenido, categorias, etiqueta, scraped_at)
-VALUES ($1, $2, $3, $4::timestamp, $5, $6, $7, $8, now())
+INSERT INTO academico.noticia (id_wp, titulo, url, fecha_pub, resumen, contenido, categorias, etiqueta, fuente, tema, scraped_at)
+VALUES ($1, $2, $3, $4::timestamp, $5, $6, $7, $8, $9, $10, now())
 ON CONFLICT (id_wp) DO UPDATE SET titulo = EXCLUDED.titulo, resumen = EXCLUDED.resumen, contenido = EXCLUDED.contenido,
-  etiqueta = EXCLUDED.etiqueta, scraped_at = now()
-RETURNING id_wp, titulo, etiqueta, (xmax = 0) AS es_nueva, contenido, url, fecha_pub;""".strip(), [640, 40],
-         replacement="={{ [ $json.id_wp, $json.titulo, $json.url, $json.fecha_pub, $json.resumen, $json.contenido, $json.categorias, $json.etiqueta ] }}")
+  etiqueta = EXCLUDED.etiqueta, fuente = EXCLUDED.fuente, tema = EXCLUDED.tema, scraped_at = now()
+RETURNING id_wp, titulo, etiqueta, (xmax = 0) AS es_nueva, contenido, url, fecha_pub, fuente, tema;""".strip(), [640, 40],
+         replacement="={{ [ $json.id_wp, $json.titulo, $json.url, $json.fecha_pub, $json.resumen, $json.contenido, $json.categorias, $json.etiqueta, $json.fuente, $json.tema ] }}")
 s.add("¿Es nueva?", "n8n-nodes-base.filter", 2.2,
       {"conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
                       "conditions": [{"id": nid(), "leftValue": "={{ $json.es_nueva }}", "rightValue": True,
@@ -501,13 +505,65 @@ s.add("Embeddings noticia", "n8n-nodes-base.httpRequest", 4.2,
       {"method": "POST", "url": f"{MCP_URL}/embed", "sendHeaders": True,
        "headerParameters": {"parameters": [{"name": "X-API-Key", "value": "={{ $env.API_TOKEN }}"}]},
        "sendBody": True, "specifyBody": "json",
-       "jsonBody": "={{ JSON.stringify({ texts: [ '[Noticia UNAB ' + String($json.fecha_pub).slice(0,10) + ' - ' + $json.titulo + '] ' + String($json.contenido).slice(0, 1500) ] }) }}",
+       "jsonBody": "={{ JSON.stringify({ texts: [ '[Noticia ' + ($('Upsert noticia').item.json.fuente || 'unab.edu.co') + ' ' + String($json.fecha_pub).slice(0,10) + ' - ' + $json.titulo + '] ' + String($json.contenido).slice(0, 1500) ] }) }}",
        "options": {"timeout": 60000}}, [1080, 40])
 pg_query(s, "Guardar noticia en PGVector", """
 INSERT INTO academico.documento_chunk (fuente, titulo, seccion, chunk_index, contenido, metadata, embedding)
 VALUES ('noticia', $1, $2, 0, $3, jsonb_build_object('url', $4::text), $5::vector)
 ON CONFLICT (fuente, titulo, chunk_index) DO UPDATE SET contenido = EXCLUDED.contenido, embedding = EXCLUDED.embedding;""".strip(),
-         [1300, 40], replacement="={{ [ $('¿Es nueva?').item.json.titulo, $('¿Es nueva?').item.json.etiqueta, '[Noticia UNAB ' + String($('¿Es nueva?').item.json.fecha_pub).slice(0,10) + ' - ' + $('¿Es nueva?').item.json.titulo + '] ' + String($('¿Es nueva?').item.json.contenido).slice(0,1500), $('¿Es nueva?').item.json.url, $json.pgvector[0] ] }}")
+         [1300, 40], replacement="={{ [ $('¿Es nueva?').item.json.titulo, $('¿Es nueva?').item.json.etiqueta, '[Noticia ' + ($('¿Es nueva?').item.json.fuente || 'unab.edu.co') + ' ' + String($('¿Es nueva?').item.json.fecha_pub).slice(0,10) + ' - ' + $('¿Es nueva?').item.json.titulo + '] ' + String($('¿Es nueva?').item.json.contenido).slice(0,1500), $('¿Es nueva?').item.json.url, $json.pgvector[0] ] }}")
+code(s, "Fuentes externas (RSS)", r"""
+// Noticias del día de educación, tecnología e ingeniería de sistemas (Google News, últimos 2 días) + ENTER.CO
+const gn = q => 'https://news.google.com/rss/search?q=' + encodeURIComponent(q + ' when:2d') + '&hl=es-419&gl=CO&ceid=CO:es-419';
+return [
+  { json: { url: gn('educación superior Colombia universidades'), tema: 'Educación' } },
+  { json: { url: gn('tecnología Colombia'), tema: 'Tecnología' } },
+  { json: { url: gn('"ingeniería de sistemas" OR "desarrollo de software" OR "inteligencia artificial" Colombia'), tema: 'Ingeniería de Sistemas' } },
+  { json: { url: 'https://www.enter.co/feed/', tema: 'Tecnología' } },
+];
+""", [-20, 300])
+s.add("GET feeds RSS", "n8n-nodes-base.httpRequest", 4.2,
+      {"url": "={{ $json.url }}", "sendHeaders": True,
+       "headerParameters": {"parameters": [{"name": "User-Agent", "value": "ChatbotAcademicoUNAB/1.0 (proyecto academico)"}]},
+       "options": {"timeout": 30000, "response": {"response": {"responseFormat": "text", "outputPropertyName": "xml"}}}},
+      [200, 300], onError="continueRegularOutput")
+code(s, "Parsear RSS", r"""
+const temaDe = t => /ingenier[ií]a de sistemas|software|programaci|desarrollador|inteligencia artificial|\bIA\b|ciberseguridad|\bdatos\b|algoritm|computaci|\bnube\b|cloud/i.test(t) ? 'Ingeniería de Sistemas'
+  : /tecnolog|digital|internet|\bapp\b|innovaci|\b5g\b|startup|robot/i.test(t) ? 'Tecnología'
+  : /educaci|universidad|estudiant|beca|icetex|acad[eé]mic|docente|pregrado|posgrado/i.test(t) ? 'Educación' : 'Institucional';
+const txt = (x, tag) => { const m = x.match(new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)</' + tag + '>', 'i')); return m ? m[1] : ''; };
+const limpia = h => String(h || '').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"')
+  .replace(/&#39;|&#8217;|&#8216;/g, "'").replace(/&#8220;|&#8221;/g, '"').replace(/&nbsp;|&#160;/g, ' ').replace(/&#\d+;/g, ' ').replace(/\s+/g, ' ').trim();
+const fnv = (s, seed) => { let h = seed >>> 0; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; };
+const idDe = url => -((fnv(url, 2166136261) % 1048576) * 4294967296 + fnv(url, 33554467));   // id negativo: no choca con WordPress
+const desde = Date.now() - 3 * 86400000, vistos = new Set(), out = [];
+const fuentes = $('Fuentes externas (RSS)').all();
+$input.all().forEach((it, i) => {
+  const xml = String(it.json.xml || ''); const temaFeed = (fuentes[i] || fuentes[0]).json.tema;
+  const items = xml.split(/<item[\s>]/i).slice(1, 9);
+  for (const raw of items) {
+    let titulo = limpia(txt(raw, 'title')); const link = limpia(txt(raw, 'link'));
+    const fecha = new Date(limpia(txt(raw, 'pubDate')));
+    if (!titulo || !link || isNaN(fecha) || fecha.getTime() < desde || vistos.has(link)) continue;
+    vistos.add(link);
+    let fuente = limpia(txt(raw, 'source'));
+    if (!fuente) { try { fuente = new URL(link).hostname.replace(/^www\./, ''); } catch (e) { fuente = 'RSS'; } }
+    if (titulo.endsWith(' - ' + fuente)) titulo = titulo.slice(0, -(fuente.length + 3));
+    let resumen = limpia(txt(raw, 'description')).replace(titulo, '').replace(fuente, '').trim().slice(0, 400);
+    if (resumen.length < 25) resumen = titulo;
+    const tema = temaDe(titulo + ' ' + resumen) === 'Institucional' ? temaFeed : temaDe(titulo + ' ' + resumen);
+    out.push({ json: { id_wp: idDe(link), titulo, url: link, fecha_pub: fecha.toISOString(), resumen, contenido: resumen,
+      categorias: 'RSS', etiqueta: /convocatoria|beca|inscripci/i.test(titulo) ? 'CONVOCATORIA' : /curso|diplomado|taller|bootcamp/i.test(titulo) ? 'CURSOS' : /certificaci/i.test(titulo) ? 'CERTIFICACION' : 'GENERAL',
+      fuente: fuente.slice(0, 80), tema } });
+  }
+});
+return out.slice(0, 30);
+""", [420, 300])
+s.link("Cada 6 horas", "Fuentes externas (RSS)")
+s.link("Ejecutar manualmente", "Fuentes externas (RSS)")
+s.link("Fuentes externas (RSS)", "GET feeds RSS")
+s.link("GET feeds RSS", "Parsear RSS")
+s.link("Parsear RSS", "Upsert noticia")
 s.link("Cada 6 horas", "Categorías a consultar")
 s.link("Ejecutar manualmente", "Categorías a consultar")
 s.link("Categorías a consultar", "GET unab.edu.co wp-json")

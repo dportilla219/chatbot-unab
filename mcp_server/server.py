@@ -260,12 +260,19 @@ def calendario_academico(texto: str | None = None, desde: str | None = None) -> 
 
 @mcp.tool
 def noticias_recientes(tema: str | None = None, limite: int = 5) -> list[dict]:
-    """Noticias UNAB obtenidas por el scraper: nuevos cursos, convocatorias, certificaciones, CCD.
-    tema opcional: 'CURSOS' | 'CONVOCATORIA' | 'CERTIFICACION' | 'CCD' o una palabra clave."""
-    sql = "SELECT titulo, fecha_pub, etiqueta, resumen, url FROM noticia"
+    """Noticias obtenidas por el scraper (UNAB y noticias del día de educación, tecnología e ingeniería de
+    sistemas), con fuente y fecha. tema opcional: 'Educación' | 'Tecnología' | 'Ingeniería de Sistemas' |
+    'Institucional' | 'CURSOS' | 'CONVOCATORIA' | 'CERTIFICACION' | 'CCD' o una palabra clave."""
+    extra = ", fuente, tema" if _existe("noticia", "fuente") else ""
+    sql = f"SELECT titulo, fecha_pub, etiqueta, resumen, url{extra} FROM noticia"
     params: list = []
     if tema:
-        if tema.upper() in ("CURSOS", "CONVOCATORIA", "CERTIFICACION", "CCD", "GENERAL"):
+        temas = {"educacion": "Educación", "tecnologia": "Tecnología", "ingenieria de sistemas": "Ingeniería de Sistemas",
+                 "institucional": "Institucional"}
+        if extra and _norm(tema) in temas:
+            sql += " WHERE tema=%s"
+            params.append(temas[_norm(tema)])
+        elif tema.upper() in ("CURSOS", "CONVOCATORIA", "CERTIFICACION", "CCD", "GENERAL"):
             sql += " WHERE etiqueta=%s"
             params.append(tema.upper())
         else:
@@ -490,9 +497,15 @@ def _existe(tabla: str, columna: str | None = None) -> bool:
     return _COLS_CACHE[k]
 
 
-def _app_noticias():
-    return db.fetch_all("""SELECT titulo, to_char(fecha_pub,'YYYY-MM-DD') AS fecha, etiqueta, resumen, url
-                           FROM noticia ORDER BY fecha_pub DESC NULLS LAST LIMIT 20""")
+def _app_noticias(tema: str = ""):
+    extra = "fuente, tema" if _existe("noticia", "fuente") else "'unab.edu.co' AS fuente, NULL AS tema"
+    sql = f"""SELECT titulo, to_char(fecha_pub,'YYYY-MM-DD') AS fecha, ((fecha_pub AT TIME ZONE 'UTC') AT TIME ZONE 'America/Bogota')::date = (now() AT TIME ZONE 'America/Bogota')::date AS hoy,
+                     etiqueta, resumen, url, {extra} FROM noticia"""
+    params: list = []
+    if tema and _existe("noticia", "tema"):
+        sql += " WHERE tema = %s"
+        params.append(tema)
+    return db.fetch_all(sql + " ORDER BY fecha_pub DESC NULLS LAST LIMIT 40", params)
 
 
 def _app_eventos(sid: str = ""):
@@ -608,7 +621,7 @@ async def app_datos(request: Request):
     seccion = b.get("seccion"); sid = (b.get("id_estudiante") or "").strip().upper()
     try:
         if seccion == "noticias":
-            data = _app_noticias()
+            data = _app_noticias(str(b.get("tema") or ""))
         elif seccion == "eventos":
             data = _app_eventos(sid)
         elif seccion in ("historial", "personal", "conversaciones", "conversacion"):

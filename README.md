@@ -15,7 +15,7 @@ Chatbot híbrido **RAG + agentes MCP** orquestado en **n8n** para estudiantes de
 | App móvil | **Gradio 6.32** instalable como **PWA en Android** + proyecto WebView (APK) | AWS EC2 · Docker |
 | HTTPS | **Caddy** + sslip.io (Let's Encrypt) | AWS EC2 · Docker |
 | Calendario | **Google Sheets** (publicado como CSV) | Google Drive |
-| Noticias | Scraper de la API WordPress de **unab.edu.co** | Workflow n8n cada 6 h |
+| Noticias | Scraper de **unab.edu.co** (WordPress) + noticias del día por RSS (Google News: educación, tecnología, ingeniería de sistemas; ENTER.CO) | Workflow n8n cada 6 h |
 
 ---
 
@@ -239,7 +239,19 @@ Tabla `n8n_chat_histories` en Supabase con las conversaciones guardadas (mensaje
 
 ## 9. Scraper de noticias
 
-Fuente: API pública `unab.edu.co/wp-json/wp/v2/posts`, categorías Estudiantes (232), Ingeniería de Sistemas (556) y Facultad de Ingeniería (134). Etiqueta cada noticia como `CCD`, `CERTIFICACION`, `CONVOCATORIA`, `CURSOS` o `GENERAL`. Se ejecuta en n8n cada 6 horas; `mcp_server/scraper.py` es la versión en Python, con respaldo de scraping HTML.
+El workflow **04** (n8n, cada 6 horas) y `mcp_server/scraper.py` (misma lógica en Python, ruta `POST /scrape`) reúnen dos tipos de fuentes:
+
+| Fuente | Qué trae | Cómo |
+|---|---|---|
+| **unab.edu.co** (API WordPress `wp-json/wp/v2/posts`) | Noticias institucionales: categorías Estudiantes (232), Ingeniería de Sistemas (556) y Facultad de Ingeniería (134) | JSON; respaldo por scraping HTML |
+| **Google News RSS** (últimos 2 días, `when:2d`) | Noticias del día de **educación** superior, **tecnología** e **ingeniería de sistemas** (software, IA, datos) en Colombia, con el **medio de origen** (El Tiempo, Semana, La República…) | RSS, 8 por tema |
+| **ENTER.CO** (`/feed/`) | Tecnología y cultura digital en Colombia | RSS |
+
+Cada noticia se guarda con **título, fecha, fuente, tema** (`Educación`, `Tecnología`, `Ingeniería de Sistemas`, `Institucional`), etiqueta (`CURSOS`, `CONVOCATORIA`, `CERTIFICACION`, `CCD`, `GENERAL`), resumen y enlace. Las nuevas se vectorizan y entran al RAG.
+
+**Integración:** el agente las consulta con la herramienta MCP `noticias_recientes` (filtra por tema o etiqueta y cita fuente y fecha), y la app las muestra en la pestaña **Noticias** con filtro por tema, la marca **Hoy** y el enlace a la fuente original.
+
+![Noticias por tema](docs/capturas/app_noticias_temas.png)
 
 ## 10. Aplicación Android (Gradio)
 

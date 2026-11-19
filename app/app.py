@@ -95,6 +95,13 @@ html, body { overflow-x: hidden !important; }
 #appbar .sello { background:linear-gradient(120deg, var(--naranja), var(--morado)); color:#fff; font-size:.62rem;
                  letter-spacing:.5px; padding:5px 7px; border-radius:8px; }
 #ficha-personal { margin-bottom:4px; }
+#filtro-tema { background:transparent !important; border:none !important; padding:0 !important; margin-bottom:6px !important; }
+#filtro-tema .wrap { display:flex !important; flex-wrap:nowrap !important; overflow-x:auto !important; gap:8px !important; scrollbar-width:none; }
+#filtro-tema .wrap::-webkit-scrollbar { display:none; }
+#filtro-tema label { flex:0 0 auto !important; border-radius:999px !important; background:#fff !important; border:1px solid var(--borde) !important;
+      padding:6px 12px !important; font-size:.8rem !important; color:var(--tinta) !important; box-shadow:none !important; }
+#filtro-tema label.selected, #filtro-tema label:has(input:checked) { background:var(--naranja-claro) !important; border-color:var(--naranja) !important; }
+#filtro-tema input { display:none !important; }
 #mis-eventos { padding:6px 12px !important; margin-bottom:8px !important; border-color:#D9C4F7 !important; }
 #ficha-personal #ficha { background:#fff; border:1px solid var(--borde); border-radius:14px; padding:12px 14px; }
 #salir { margin-top:10px !important; background:#fff !important; border:1px solid #F3C2C2 !important; color:#B42318 !important; }
@@ -224,18 +231,21 @@ def historial_previo(nombre, sid, programa, limite=10):
     return msgs
 
 
-def datos_app(seccion, state):
+def datos_app(seccion, state, **extra):
     sid = (state or {}).get("id", "")
     try:
-        r = requests.post(f"{API_URL}/app/datos", json={"seccion": seccion, "id_estudiante": sid},
+        r = requests.post(f"{API_URL}/app/datos", json={"seccion": seccion, "id_estudiante": sid, **extra},
                           headers=HDR, timeout=20).json()
         return r.get("datos") if r.get("ok") else None
     except Exception:  # noqa: BLE001
         return None
 
 
-def ver_noticias(state):
-    return vistas.noticias(datos_app("noticias", state))
+TEMAS_NOTICIAS = ["Todas", "Educación", "Tecnología", "Ingeniería de Sistemas", "Institucional"]
+
+
+def ver_noticias(state, tema="Todas"):
+    return vistas.noticias(datos_app("noticias", state, tema="" if tema in (None, "Todas") else tema))
 
 
 def ver_eventos(state):
@@ -540,6 +550,7 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
             btn_nueva_chat = gr.Button("+ Nueva", size="sm", elem_id="nueva-chat", scale=0)
         with gr.Tabs(selected="chat", elem_id="tabs") as tabs:
             with gr.Tab("Noticias", id="noticias") as tab_noticias:
+                filtro_tema = gr.Radio(TEMAS_NOTICIAS, value="Todas", show_label=False, container=False, elem_id="filtro-tema")
                 html_noticias = gr.HTML(padding=False)
             with gr.Tab("Historial", id="historial") as tab_historial:
                 with gr.Row(elem_id="conv-cabecera"):
@@ -606,7 +617,8 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
     for b, (_, q) in zip(botones, SUGERENCIAS):
         b.click(lambda h, st, q=q: agregar_pregunta(q, h, st), [chat, state], [msg, chat, pendiente], queue=False).then(
             responder, [pendiente, chat, state], chat)
-    tab_noticias.select(ver_noticias, state, html_noticias)
+    tab_noticias.select(ver_noticias, [state, filtro_tema], html_noticias)
+    filtro_tema.change(ver_noticias, [state, filtro_tema], html_noticias)
     tab_historial.select(lista_conversaciones, state, lista_conv)
     lista_conv.input(abrir_conversacion, [lista_conv, state], [chat, state, tabs])
     btn_nueva_conv.click(nueva_conversacion, state, [chat, state, tabs])

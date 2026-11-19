@@ -63,15 +63,20 @@ def _vacio(txt):
 
 def noticias(datos):
     if not datos:
-        return _vacio("Todavía no hay noticias. El scraper las actualiza cada 6 horas.")
+        return _vacio("No hay noticias para este tema. El scraper las actualiza cada 6 horas.")
     out = ["<div class='vista'>"]
     for n in datos:
         etq = ETIQUETAS.get((n.get("etiqueta") or "").upper(), n.get("etiqueta") or "")
         resumen = escape((n.get("resumen") or "")[:220]) + ("…" if len(n.get("resumen") or "") > 220 else "")
+        fuente = n.get("fuente") or "unab.edu.co"
+        tema = n.get("tema")
+        hoy = "<span class='etq ok'>Hoy</span>" if n.get("hoy") else ""
+        chips = hoy + (f"<span class='etq nar'>{escape(tema)}</span>" if tema else "") + \
+            (f"<span class='etq'>{escape(etq)}</span>" if etq and etq != "General" else "")
         out.append(f"<div class='item'><div class='titulo'>{escape(n['titulo'])}</div>"
-                   f"<div class='meta'><span class='etq'>{escape(etq)}</span>{escape(n.get('fecha') or '')}</div>"
+                   f"<div class='meta'>{chips}<b>{escape(fuente)}</b> · {escape(n.get('fecha') or '')}</div>"
                    f"<div class='texto'>{resumen}</div>"
-                   f"<div class='meta'><a href='{escape(n['url'])}' target='_blank' rel='noopener'>Leer en unab.edu.co</a></div></div>")
+                   f"<div class='meta'><a href='{escape(n['url'])}' target='_blank' rel='noopener'>Leer en {escape(fuente)}</a></div></div>")
     return "".join(out) + "</div>"
 
 
