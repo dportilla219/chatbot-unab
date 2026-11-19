@@ -61,7 +61,7 @@ html, body { overflow-x: hidden !important; }
 .gradio-container .column, .gradio-container .row, #panel-chat { min-width: 0 !important; max-width: 100% !important; }
 #chips { width: 100% !important; max-width: calc(100vw - 20px) !important; }
 /* Etiquetas de campos: texto simple en vez de pastillas */
-#login span[data-testid="block-info"], #login label > span { background: transparent !important; color: var(--tinta) !important;
+.tarjeta span[data-testid="block-info"], .tarjeta label > span { background: transparent !important; color: var(--tinta) !important;
       padding: 0 !important; font-weight: 600 !important; font-size: .85rem !important; border: none !important; box-shadow:none !important; }
 
 /* Encabezado */
@@ -202,33 +202,140 @@ def ver_personal(state):
     return vistas.personal(datos_app("personal", state)) if state else ""
 
 
-def login(nombre, sid, programa, state):
+def config_servidor():
+    """Funciones activas en el servidor (contraseñas y sesiones existen solo tras la migración 06)."""
     try:
-        r = requests.post(f"{API_URL}/auth", json={"nombre_completo": nombre, "id_estudiante": sid,
-                                                    "programa": programa}, headers=HDR, timeout=15).json()
-    except Exception as e:  # noqa: BLE001
-        return state, gr.update(), gr.update(), "", [], f"No se pudo conectar con el servidor ({e.__class__.__name__})."
-    if not r.get("ok"):
-        return state, gr.update(visible=True), gr.update(visible=False), "", [], f"{r.get('mensaje')}"
+        return requests.get(f"{API_URL}/auth/config", headers=HDR, timeout=10).json()
+    except Exception:  # noqa: BLE001
+        return {"password": False, "sesiones": False, "demo": DEMO_HABILITADO}
+
+
+def nombre_dispositivo(request: gr.Request | None) -> str:
+    ua = ((request.headers.get("user-agent") if request else "") or "").lower()
+    so = next((n for k, n in [("android", "Android"), ("iphone", "iPhone"), ("ipad", "iPad"), ("windows", "Windows"),
+                              ("mac os", "Mac"), ("linux", "Linux")] if k in ua), "Dispositivo")
+    nav = next((n for k, n in [("edg", "Edge"), ("chrome", "Chrome"), ("firefox", "Firefox"), ("safari", "Safari")]
+                if k in ua), "navegador")
+    return f"{so} · {nav}"
+
+
+# Salidas comunes del inicio de sesión:
+# state, panel_login, panel_chat, ficha, chat, error, token guardado, panel de cambio obligatorio, cabecera
+def _entrar(r, recordar, password_usada=""):
     est = r["estudiante"]
     state = {"id": est["id_estudiante"], "nombre": est["nombre_completo"], "programa": est["programa"],
-             "semestre": est["semestre_actual"], "session": f"{est['id_estudiante']}"}
-    previos = historial_previo(nombre, sid, programa)
+             "semestre": est["semestre_actual"], "session": est["id_estudiante"], "token": r.get("token") or "",
+             "demo": bool(r.get("demo")), "pw": password_usada if r.get("debe_cambiar") else ""}
+    previos = historial_previo(est["nombre_completo"], est["id_estudiante"], est["programa"])
+    nombre = est["nombre_completo"].split()[0]
     if previos:
-        saludo = (f"¡Hola de nuevo, **{est['nombre_completo'].split()[0]}**! Arriba está nuestra conversación anterior; "
+        saludo = (f"¡Hola de nuevo, **{nombre}**! Arriba está nuestra conversación anterior; "
                   "puedes continuar donde la dejaste o preguntarme algo nuevo.")
-        return (state, gr.update(visible=False), gr.update(visible=True), ficha_html(state),
-                previos + [{"role": "assistant", "content": saludo}], "")
-    saludo = (f"¡Hola, **{est['nombre_completo'].split()[0]}**! Soy tu asistente académico. "
-              f"Estás en **{est['programa']}**, semestre {est['semestre_actual']}. "
-              "Puedo ayudarte con tu matrícula, avance del plan, proyección de grado, competencias digitales, "
-              "calendario académico, reglamento y noticias. ¿En qué te ayudo?")
-    return (state, gr.update(visible=False), gr.update(visible=True), ficha_html(state),
-            [{"role": "assistant", "content": saludo}], "")
+    else:
+        saludo = (f"¡Hola, **{nombre}**! Soy tu asistente académico. "
+                  f"Estás en **{est['programa']}**, semestre {est['semestre_actual']}. "
+                  "Puedo ayudarte con tu matrícula, avance del plan, proyección de grado, competencias digitales, "
+                  "calendario académico, reglamento y noticias. ¿En qué te ayudo?")
+    guardar = state["token"] if (recordar and state["token"]) else ""
+    debe = bool(r.get("debe_cambiar"))
+    return (state, gr.update(visible=False), gr.update(visible=not debe), ficha_html(state),
+            previos + [{"role": "assistant", "content": saludo}], "", guardar, gr.update(visible=debe),
+            gr.update(visible=False))
 
 
-def login_demo(state):
-    return login(DEMO_NOMBRE, DEMO_ID, "Ingeniería de Sistemas", state)
+def _error(msg):
+    return ({}, gr.update(visible=True), gr.update(visible=False), "", [], msg, gr.update(),
+            gr.update(visible=False), gr.update(visible=True))
+
+
+def login(nombre, sid, programa, password, recordar, request: gr.Request):
+    try:
+        r = requests.post(f"{API_URL}/auth", json={"nombre_completo": nombre, "id_estudiante": sid, "programa": programa,
+                                                    "password": password, "recordar": bool(recordar),
+                                                    "dispositivo": nombre_dispositivo(request)},
+                          headers=HDR, timeout=15).json()
+    except Exception as e:  # noqa: BLE001
+        return _error(f"No se pudo conectar con el servidor ({e.__class__.__name__}).")
+    if not r.get("ok"):
+        return _error(r.get("mensaje") or "No se pudo iniciar sesión.")
+    return _entrar(r, recordar, password)
+
+
+def login_demo(request: gr.Request):
+    try:
+        r = requests.post(f"{API_URL}/auth", json={"demo": True, "recordar": True,
+                                                    "dispositivo": nombre_dispositivo(request) + " (prueba)"},
+                          headers=HDR, timeout=15).json()
+    except Exception as e:  # noqa: BLE001
+        return _error(f"No se pudo conectar con el servidor ({e.__class__.__name__}).")
+    if not r.get("ok"):  # servidor sin la ruta demo: se entra con nombre e ID del perfil de prueba
+        r = requests.post(f"{API_URL}/auth", json={"nombre_completo": DEMO_NOMBRE, "id_estudiante": DEMO_ID,
+                                                    "programa": "Ingeniería de Sistemas"}, headers=HDR, timeout=15).json()
+        if not r.get("ok"):
+            return _error(r.get("mensaje") or "No se pudo entrar al perfil de prueba.")
+    r["debe_cambiar"] = False
+    return _entrar(r, True)
+
+
+def reanudar(token_guardado):
+    """Al abrir la app: si este dispositivo tiene una sesión guardada, entra directo."""
+    cfg = config_servidor()
+    campos = (gr.update(visible=bool(cfg.get("password"))), gr.update(visible=bool(cfg.get("sesiones"))))
+    if not token_guardado:
+        return _error("") + campos
+    try:
+        r = requests.post(f"{API_URL}/auth/token", json={"token": token_guardado}, headers=HDR, timeout=15).json()
+    except Exception:  # noqa: BLE001
+        r = {}
+    if not r.get("ok"):
+        out = list(_error(""))
+        out[6] = ""  # borra el token inválido del dispositivo
+        return tuple(out) + campos
+    r["token"] = token_guardado
+    return _entrar(r, True) + campos
+
+
+def cambiar_password(actual, nueva, confirmar, state):
+    if not state or not state.get("token"):
+        return "Para cambiar la contraseña, cierra sesión y vuelve a entrar.", state, gr.update(), gr.update()
+    if nueva != confirmar:
+        return "La confirmación no coincide con la contraseña nueva.", state, gr.update(), gr.update()
+    actual = actual or state.get("pw", "")
+    try:
+        r = requests.post(f"{API_URL}/auth/password", json={"token": state["token"], "actual": actual, "nueva": nueva},
+                          headers=HDR, timeout=15).json()
+    except Exception as e:  # noqa: BLE001
+        return f"No se pudo conectar con el servidor ({e.__class__.__name__}).", state, gr.update(), gr.update()
+    if r.get("ok"):
+        state = {**state, "pw": ""}
+        return "Contraseña actualizada. Las demás sesiones abiertas se cerraron.", state, gr.update(visible=False), gr.update(visible=True)
+    return r.get("mensaje", "No se pudo cambiar la contraseña."), state, gr.update(), gr.update()
+
+
+def sesiones(state, cerrar=None):
+    if not state or not state.get("token"):
+        return gr.update(choices=[], value=None), "No hay sesiones guardadas para este ingreso."
+    body = {"token": state["token"]}
+    if cerrar:
+        body["cerrar"] = cerrar
+    try:
+        r = requests.post(f"{API_URL}/auth/sesiones", json=body, headers=HDR, timeout=15).json()
+    except Exception:  # noqa: BLE001
+        return gr.update(), "No se pudo consultar las sesiones."
+    filas = r.get("sesiones") or []
+    opciones = [(f"{f['dispositivo']} · desde {f['creada']}" + (" (este dispositivo)" if f["actual"] else ""), f["id"])
+                for f in filas]
+    return gr.update(choices=opciones, value=None), f"{len(filas)} sesión(es) abierta(s)."
+
+
+def logout(state):
+    if state and state.get("token"):
+        try:
+            requests.post(f"{API_URL}/auth/sesiones", json={"token": state["token"], "cerrar": "esta"},
+                          headers=HDR, timeout=10)
+        except Exception:  # noqa: BLE001
+            pass
+    return _error("Sesión cerrada.")[:6] + ("", gr.update(visible=False), gr.update(visible=True))
 
 
 def agregar_pregunta(mensaje, historial, state):
@@ -261,21 +368,22 @@ def responder(pendiente, historial, state):
     return historial + [{"role": "assistant", "content": texto}]
 
 
-def logout():
-    return {}, gr.update(visible=True), gr.update(visible=False), "", [], ""
-
-
 with gr.Blocks(title="Asistente Académico UNAB") as demo:
     state = gr.State({})
     pendiente = gr.State("")
+    token_guardado = gr.BrowserState("", storage_key="unab_sesion",
+                                     secret=os.getenv("BROWSER_SECRET", API_TOKEN or "unab-asistente"))
 
-    with gr.Column(visible=True) as panel_login_wrap:
+    with gr.Column(visible=True) as cabecera:
         gr.HTML(HEADER)
     with gr.Column(visible=True, elem_id="login", elem_classes="tarjeta") as panel_login:
         gr.HTML("<h2>Inicia sesión</h2><p class='sub'>Ingresa tu nombre completo, tu ID estudiantil y tu carrera.</p>")
         nombre = gr.Textbox(label="Nombre completo", placeholder="Ej: Valentina Rojas Méndez", max_lines=1)
         sid = gr.Textbox(label="ID estudiantil", placeholder="Ej: U00174957", max_lines=1)
         programa = gr.Dropdown(PROGRAMAS, value="Ingeniería de Sistemas", label="Carrera")
+        password = gr.Textbox(label="Contraseña", type="password", max_lines=1, visible=False,
+                              info="Si es tu primer ingreso, tu contraseña es tu mismo ID.")
+        recordar = gr.Checkbox(value=True, label="Mantener la sesión abierta en este dispositivo", visible=False)
         error = gr.Markdown("")
         btn_login = gr.Button("Ingresar", variant="primary", size="lg")
         btn_demo = gr.Button("Entrar con perfil de prueba", size="lg", elem_id="demo-btn", visible=DEMO_HABILITADO)
@@ -283,8 +391,18 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
             gr.Markdown("- **Valentina Rojas Méndez** · U00174957 (estado normal)\n"
                         "- **Andrés Felipe Gómez Pardo** · U00160001 (condicional)\n"
                         "- **Laura Camila Suárez Díaz** · U00160002\n"
-                        "- **Santiago Pérez Villamizar** · U00160003 (primer semestre)")
+                        "- **Santiago Pérez Villamizar** · U00160003 (primer semestre)\n\n"
+                        "Si el servidor pide contraseña, la primera vez es el mismo ID.")
         gr.HTML("<p class='nota'>Proyecto académico · datos sintéticos que simulan Banner/COSMOS</p>")
+
+    with gr.Column(visible=False, elem_classes="tarjeta") as panel_cambio:
+        gr.HTML("<h2 style='margin:0;font-size:1.1rem'>Crea tu contraseña</h2><p class='sub' style='color:#6B7280'>"
+                "Es tu primer ingreso. Por seguridad, cambia la contraseña inicial (tu ID) por una nueva: "
+                "mínimo 8 caracteres, con letras y números.</p>")
+        pw_nueva1 = gr.Textbox(label="Contraseña nueva", type="password", max_lines=1)
+        pw_conf1 = gr.Textbox(label="Repite la contraseña nueva", type="password", max_lines=1)
+        msg_cambio1 = gr.Markdown("")
+        btn_cambio1 = gr.Button("Guardar y continuar", variant="primary")
 
     with gr.Column(visible=False, elem_id="panel-chat") as panel_chat:
         with gr.Row(elem_id="fila-ficha", elem_classes="tarjeta", equal_height=True):
@@ -310,13 +428,31 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
                 html_eventos = gr.HTML(padding=False)
             with gr.Tab("Personal", id="personal") as tab_personal:
                 html_personal = gr.HTML(padding=False)
+                with gr.Column(visible=False, elem_classes="tarjeta") as seguridad:
+                    gr.HTML("<h3 style='margin:0'>Seguridad</h3>")
+                    with gr.Accordion("Cambiar contraseña", open=False):
+                        pw_actual = gr.Textbox(label="Contraseña actual", type="password", max_lines=1)
+                        pw_nueva = gr.Textbox(label="Contraseña nueva", type="password", max_lines=1,
+                                              info="Mínimo 8 caracteres, con letras y números.")
+                        pw_conf = gr.Textbox(label="Repite la contraseña nueva", type="password", max_lines=1)
+                        msg_pw = gr.Markdown("")
+                        btn_pw = gr.Button("Cambiar contraseña", variant="primary")
+                    with gr.Accordion("Sesiones abiertas", open=False):
+                        lista_ses = gr.Radio(label="Dispositivos con la sesión abierta", choices=[])
+                        msg_ses = gr.Markdown("")
+                        with gr.Row():
+                            btn_cerrar_una = gr.Button("Cerrar la seleccionada", size="sm")
+                            btn_cerrar_otras = gr.Button("Cerrar todas las demás", size="sm")
 
-    salidas_login = [state, panel_login, panel_chat, ficha, chat, error]
-    cab = dict(fn=lambda st: gr.Column(visible=not bool(st)), inputs=state, outputs=panel_login_wrap)
-    al_entrar = dict(fn=lambda: gr.Tabs(selected="chat"), outputs=tabs)
-    btn_login.click(login, [nombre, sid, programa, state], salidas_login).then(**al_entrar).then(**cab)
-    sid.submit(login, [nombre, sid, programa, state], salidas_login).then(**al_entrar).then(**cab)
-    btn_demo.click(login_demo, [state], salidas_login).then(**al_entrar).then(**cab)
+    salidas = [state, panel_login, panel_chat, ficha, chat, error, token_guardado, panel_cambio, cabecera]
+    a_chat = dict(fn=lambda: gr.Tabs(selected="chat"), outputs=tabs)
+    btn_login.click(login, [nombre, sid, programa, password, recordar], salidas).then(**a_chat)
+    sid.submit(login, [nombre, sid, programa, password, recordar], salidas).then(**a_chat)
+    password.submit(login, [nombre, sid, programa, password, recordar], salidas).then(**a_chat)
+    btn_demo.click(login_demo, None, salidas).then(**a_chat)
+    demo.load(reanudar, token_guardado, salidas + [password, recordar])
+    btn_cambio1.click(lambda n, c, st: cambiar_password("", n, c, st), [pw_nueva1, pw_conf1, state],
+                      [msg_cambio1, state, panel_cambio, panel_chat])
     for disparador in (enviar.click, msg.submit):
         disparador(agregar_pregunta, [msg, chat, state], [msg, chat, pendiente], queue=False).then(
             responder, [pendiente, chat, state], chat)
@@ -326,8 +462,15 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
     tab_noticias.select(ver_noticias, state, html_noticias)
     tab_historial.select(ver_historial, state, html_historial)
     tab_eventos.select(ver_eventos, state, html_eventos)
-    tab_personal.select(ver_personal, state, html_personal)
-    btn_logout.click(logout, None, salidas_login).then(**cab)
+    tab_personal.select(ver_personal, state, html_personal).then(
+        lambda st: gr.Column(visible=bool(st and st.get("token"))), state, seguridad).then(
+        sesiones, state, [lista_ses, msg_ses])
+    btn_pw.click(lambda a, n, c, st: cambiar_password(a, n, c, st)[:2], [pw_actual, pw_nueva, pw_conf, state], [msg_pw, state]).then(
+        sesiones, state, [lista_ses, msg_ses])
+    btn_cerrar_una.click(lambda st, v: sesiones(st, v) if v else (gr.update(), "Selecciona una sesión."),
+                         [state, lista_ses], [lista_ses, msg_ses])
+    btn_cerrar_otras.click(lambda st: sesiones(st, "otras"), state, [lista_ses, msg_ses])
+    btn_logout.click(logout, state, salidas)
 
 
 if __name__ == "__main__":

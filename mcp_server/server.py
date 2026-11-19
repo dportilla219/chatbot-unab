@@ -14,9 +14,11 @@ Rutas HTTP auxiliares (para n8n y la app Gradio):
   POST /rag/search        {"query": "...", "k": 5}
   POST /scrape            ejecuta el scraper de noticias
 """
+import hashlib
 import json
 import os
 import re
+import secrets
 import unicodedata
 
 from fastmcp import FastMCP
@@ -304,12 +306,152 @@ async def health(_: Request):
     return JSONResponse({"status": "ok", **n})
 
 
-@mcp.custom_route("/auth", methods=["POST"])
-async def auth_route(request: Request):
+DEMO_HABILITADO = os.getenv("DEMO_HABILITADO", "1") == "1"
+DEMO_ID = os.getenv("DEMO_ID", "U00174957")
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _crear_sesion(sid: str, dispositivo: str) -> str | None:
+    if not _existe("sesion"):
+        return None
+    token = secrets.token_urlsafe(32)
+    db.execute("INSERT INTO sesion (token_hash, id_estudiante, dispositivo) VALUES (%s, %s, %s)",
+               (_hash_token(token), sid, (dispositivo or "Dispositivo")[:120]))
+    return token
+
+
+def _sesion_de_token(token: str) -> dict | None:
+    if not token or not _existe("sesion"):
+        return None
+    th = _hash_token(token)
+    r = db.fetch_one("SELECT id_estudiante FROM sesion WHERE token_hash=%s AND NOT revocada", (th,))
+    if r:
+        db.execute("UPDATE sesion SET ultimo_uso=now() WHERE token_hash=%s", (th,))
+        r["token_hash"] = th
+    return r
+
+
+def _estudiante(sid: str) -> dict | None:
+    return db.fetch_one("""SELECT e.id_estudiante, e.nombre_completo, e.semestre_actual, e.condicion, p.nombre AS programa
+                           FROM estudiante e JOIN programa p USING (cod_programa) WHERE e.id_estudiante=%s""", (sid,))
+
+
+async def _json(request: Request) -> dict:
+    try:
+        return await request.json()
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+@mcp.custom_route("/auth/config", methods=["GET"])
+async def auth_config(request: Request):
+    """Qué funciones de acceso están activas (dependen de la migración 06)."""
     if not _authorized(request):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
-    b = await request.json()
-    return JSONResponse(autenticar(b.get("nombre_completo", ""), b.get("id_estudiante", ""), b.get("programa", "Ingeniería de Sistemas")))
+    return JSONResponse({"password": _existe("acceso"), "sesiones": _existe("sesion"),
+                         "demo": DEMO_HABILITADO})
+
+
+@mcp.custom_route("/auth", methods=["POST"])
+async def auth_route(request: Request):
+    """Inicio de sesión: nombre + ID + carrera (+ contraseña si la migración 06 está aplicada).
+    Con demo=true entra al perfil de prueba sin datos. Si hay sesiones guardadas, devuelve un token."""
+    if not _authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    b = await _json(request)
+    debe_cambiar = False
+    if b.get("demo"):
+        if not DEMO_HABILITADO:
+            return JSONResponse({"ok": False, "mensaje": "El perfil de prueba está desactivado."})
+        e = _estudiante(DEMO_ID)
+        if not e:
+            return JSONResponse({"ok": False, "mensaje": "No existe el estudiante de prueba."})
+        r = {"ok": True, "estudiante": e, "demo": True}
+    else:
+        r = autenticar(b.get("nombre_completo", ""), b.get("id_estudiante", ""), b.get("programa", "Ingeniería de Sistemas"))
+        if not r.get("ok"):
+            return JSONResponse(r)
+        sid = r["estudiante"]["id_estudiante"]
+        if _existe("acceso"):
+            a = db.fetch_one("""SELECT debe_cambiar, password_hash = extensions.crypt(%s, password_hash) AS valida
+                                FROM acceso WHERE id_estudiante=%s""", (b.get("password") or "", sid))
+            if not a or not a["valida"]:
+                return JSONResponse({"ok": False, "mensaje": "La contraseña no es correcta."})
+            debe_cambiar = bool(a["debe_cambiar"])
+    r["debe_cambiar"] = debe_cambiar
+    if b.get("recordar", True):
+        r["token"] = _crear_sesion(r["estudiante"]["id_estudiante"], b.get("dispositivo", ""))
+    return JSONResponse(json.loads(json.dumps(r, default=str)))
+
+
+@mcp.custom_route("/auth/token", methods=["POST"])
+async def auth_token(request: Request):
+    """Reabre una sesión guardada en el dispositivo (sin volver a escribir los datos)."""
+    if not _authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    ses = _sesion_de_token((await _json(request)).get("token", ""))
+    if not ses:
+        return JSONResponse({"ok": False, "mensaje": "La sesión guardada ya no es válida."})
+    debe = False
+    if _existe("acceso"):
+        a = db.fetch_one("SELECT debe_cambiar FROM acceso WHERE id_estudiante=%s", (ses["id_estudiante"],))
+        debe = bool(a and a["debe_cambiar"]) and ses["id_estudiante"] != DEMO_ID
+    return JSONResponse(json.loads(json.dumps({"ok": True, "estudiante": _estudiante(ses["id_estudiante"]),
+                                                "debe_cambiar": debe}, default=str)))
+
+
+@mcp.custom_route("/auth/password", methods=["POST"])
+async def auth_password(request: Request):
+    """Cambio de contraseña. Exige la sesión (token) y la contraseña actual."""
+    if not _authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if not _existe("acceso"):
+        return JSONResponse({"ok": False, "mensaje": "Las contraseñas todavía no están activadas en el servidor."})
+    b = await _json(request)
+    ses = _sesion_de_token(b.get("token", ""))
+    if not ses:
+        return JSONResponse({"ok": False, "mensaje": "Tu sesión expiró. Vuelve a iniciar sesión."})
+    sid = ses["id_estudiante"]
+    nueva = b.get("nueva") or ""
+    if len(nueva) < 8 or nueva.upper() == sid or not re.search(r"[A-Za-z]", nueva) or not re.search(r"\d", nueva):
+        return JSONResponse({"ok": False, "mensaje": "La contraseña nueva debe tener al menos 8 caracteres, "
+                                                     "letras y números, y no puede ser tu ID."})
+    ok = db.fetch_one("SELECT password_hash = extensions.crypt(%s, password_hash) AS valida FROM acceso WHERE id_estudiante=%s",
+                      (b.get("actual") or "", sid))
+    if not ok or not ok["valida"]:
+        return JSONResponse({"ok": False, "mensaje": "La contraseña actual no es correcta."})
+    db.execute("""UPDATE acceso SET password_hash = extensions.crypt(%s, extensions.gen_salt('bf', 8)),
+                  debe_cambiar = FALSE, actualizado = now() WHERE id_estudiante=%s""", (nueva, sid))
+    if b.get("cerrar_otras", True):
+        db.execute("UPDATE sesion SET revocada=TRUE WHERE id_estudiante=%s AND token_hash<>%s", (sid, ses["token_hash"]))
+    return JSONResponse({"ok": True, "mensaje": "Contraseña actualizada."})
+
+
+@mcp.custom_route("/auth/sesiones", methods=["POST"])
+async def auth_sesiones(request: Request):
+    """Lista las sesiones abiertas del estudiante, o cierra una, todas las demás, o la actual."""
+    if not _authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    b = await _json(request)
+    ses = _sesion_de_token(b.get("token", ""))
+    if not ses:
+        return JSONResponse({"ok": False, "sesiones": []})
+    sid, th = ses["id_estudiante"], ses["token_hash"]
+    cerrar = b.get("cerrar")
+    if cerrar == "esta":
+        db.execute("UPDATE sesion SET revocada=TRUE WHERE token_hash=%s", (th,))
+    elif cerrar == "otras":
+        db.execute("UPDATE sesion SET revocada=TRUE WHERE id_estudiante=%s AND token_hash<>%s", (sid, th))
+    elif cerrar:
+        db.execute("UPDATE sesion SET revocada=TRUE WHERE id_estudiante=%s AND left(token_hash, 12)=%s", (sid, cerrar))
+    filas = db.fetch_all("""SELECT left(token_hash, 12) AS id, dispositivo, token_hash=%s AS actual,
+               to_char((creada AT TIME ZONE 'UTC') AT TIME ZONE 'America/Bogota','YYYY-MM-DD HH24:MI') AS creada,
+               to_char((ultimo_uso AT TIME ZONE 'UTC') AT TIME ZONE 'America/Bogota','YYYY-MM-DD HH24:MI') AS ultimo_uso
+           FROM sesion WHERE id_estudiante=%s AND NOT revocada ORDER BY ultimo_uso DESC LIMIT 20""", (th, sid))
+    return JSONResponse({"ok": True, "sesiones": filas})
 
 
 @mcp.custom_route("/historial", methods=["POST"])
