@@ -86,10 +86,17 @@ html, body { overflow-x: hidden !important; }
                  font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 #ficha .nombre { font-weight:700; color:var(--tinta); font-size:.95rem; line-height:1.2; }
 #ficha .detalle { color:var(--gris); font-size:.78rem; }
-#fila-ficha { align-items:center !important; padding:10px 14px !important; flex-wrap:nowrap !important;
-              border-top:4px solid var(--naranja) !important; }
-#fila-ficha > div:first-child { flex:1 1 auto !important; }
-#salir { max-width:110px; min-width:90px !important; }
+/* Barra superior delgada */
+#appbar { position:sticky; top:0; z-index:40; align-items:center !important; flex-wrap:nowrap !important;
+          background:rgba(245,246,250,.96) !important; backdrop-filter:blur(8px); padding:4px 2px 8px !important;
+          border-bottom:1px solid var(--borde); margin-bottom:6px !important; gap:8px !important; }
+#appbar > div:first-child { flex:1 1 auto !important; min-width:0 !important; }
+#appbar .marca { display:flex; align-items:center; gap:8px; font-weight:800; color:var(--tinta); font-size:1rem; }
+#appbar .sello { background:linear-gradient(120deg, var(--naranja), var(--morado)); color:#fff; font-size:.62rem;
+                 letter-spacing:.5px; padding:5px 7px; border-radius:8px; }
+#ficha-personal { margin-bottom:4px; }
+#ficha-personal #ficha { background:#fff; border:1px solid var(--borde); border-radius:14px; padding:12px 14px; }
+#salir { margin-top:10px !important; background:#fff !important; border:1px solid #F3C2C2 !important; color:#B42318 !important; }
 
 /* Chat */
 #chat { border:none !important; background:transparent !important; }
@@ -170,7 +177,8 @@ html, body { overflow-x: hidden !important; }
 #lista-conv label span { white-space:pre-line !important; }
 #nueva-conv { max-width:170px; }
 #chat-acciones { justify-content:flex-end !important; margin-bottom:-6px !important; }
-#nueva-chat { max-width:170px; background:#fff !important; border:1px solid var(--borde) !important; color:var(--tinta) !important; }
+#nueva-chat { max-width:96px; min-width:80px !important; border-radius:999px !important; background:#fff !important;
+               border:1px solid var(--borde) !important; color:var(--tinta) !important; font-weight:600 !important; }
 
 /* Botón principal */
 button.primary { background: var(--naranja) !important; border:none !important; color:#fff !important; }
@@ -495,9 +503,9 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
         btn_cambio1 = gr.Button("Guardar y continuar", variant="primary")
 
     with gr.Column(visible=False, elem_id="panel-chat") as panel_chat:
-        with gr.Row(elem_id="fila-ficha", elem_classes="tarjeta", equal_height=True):
-            ficha = gr.HTML("", padding=False)
-            btn_logout = gr.Button("Salir", size="sm", variant="secondary", elem_id="salir", scale=0)
+        with gr.Row(elem_id="appbar", equal_height=True):
+            gr.HTML("<div class='marca'><span class='sello'>UNAB</span><span>Asistente Académico</span></div>", padding=False)
+            btn_nueva_chat = gr.Button("+ Nueva", size="sm", elem_id="nueva-chat", scale=0)
         with gr.Tabs(selected="chat", elem_id="tabs") as tabs:
             with gr.Tab("Noticias", id="noticias") as tab_noticias:
                 html_noticias = gr.HTML(padding=False)
@@ -507,9 +515,7 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
                     btn_nueva_conv = gr.Button("Nueva conversación", size="sm", variant="primary", elem_id="nueva-conv", scale=0)
                 lista_conv = gr.Radio(choices=[], show_label=False, elem_id="lista-conv", container=False)
             with gr.Tab("Chat", id="chat"):
-                with gr.Row(elem_id="chat-acciones"):
-                    btn_nueva_chat = gr.Button("Nueva conversación", size="sm", elem_id="nueva-chat", scale=0)
-                chat = gr.Chatbot(elem_id="chat", show_label=False, height="calc(100vh - 430px)", buttons=["copy"],
+                chat = gr.Chatbot(elem_id="chat", show_label=False, height="calc(100vh - 330px)", buttons=["copy"],
                                   group_consecutive_messages=False, placeholder=PLACEHOLDER,
                                   avatar_images=(None, os.path.join(os.path.dirname(__file__), "icon.png")))
                 gr.HTML("<p id='chips-titulo'>Sugerencias</p>")
@@ -522,6 +528,7 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
             with gr.Tab("Eventos", id="eventos") as tab_eventos:
                 html_eventos = gr.HTML(padding=False)
             with gr.Tab("Personal", id="personal") as tab_personal:
+                ficha = gr.HTML("", padding=False, elem_id="ficha-personal")
                 html_personal = gr.HTML(padding=False)
                 with gr.Column(visible=False, elem_classes="tarjeta") as seguridad:
                     gr.HTML("<h3 style='margin:0'>Seguridad</h3>")
@@ -538,6 +545,7 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
                         with gr.Row():
                             btn_cerrar_una = gr.Button("Cerrar la seleccionada", size="sm")
                             btn_cerrar_otras = gr.Button("Cerrar todas las demás", size="sm")
+                btn_logout = gr.Button("Cerrar sesión", size="lg", elem_id="salir")
 
     salidas = [state, panel_login, panel_chat, ficha, chat, error, token_guardado, panel_cambio, cabecera]
     a_chat = dict(fn=lambda: gr.Tabs(selected="chat"), outputs=tabs)
