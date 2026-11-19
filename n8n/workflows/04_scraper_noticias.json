@@ -9,7 +9,7 @@
         "width": 620,
         "color": 5
       },
-      "id": "37addb55-944a-4423-869e-7f483e24f44e",
+      "id": "5f7756ce-eb79-4180-bcce-f43b14226c1a",
       "name": "Nota 0",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -29,7 +29,7 @@
           ]
         }
       },
-      "id": "bce3c93b-8c78-4911-bb12-e984b698da91",
+      "id": "b1a91c77-8042-4d31-b8c5-5620683d78f3",
       "name": "Cada 6 horas",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
@@ -40,7 +40,7 @@
     },
     {
       "parameters": {},
-      "id": "0c906bf3-38d2-4f2e-9ecc-c292a6312b36",
+      "id": "e7618b50-7cb7-4562-aff1-20ebaf7f8b0e",
       "name": "Ejecutar manualmente",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
@@ -53,7 +53,7 @@
       "parameters": {
         "jsCode": "\nreturn [232, 556, 134].map(c => ({ json: { categoria: c } }));\n"
       },
-      "id": "a0505d40-47d5-4679-bcc3-e08db1084fc2",
+      "id": "5f0a11f3-cea2-4efd-84c3-0ae9b796751a",
       "name": "Categorías a consultar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -100,7 +100,7 @@
           }
         }
       },
-      "id": "5802dc77-235d-4f24-b5ae-34195da6922e",
+      "id": "b75e1f3f-073e-46a4-9d74-1e24b65ede2a",
       "name": "GET unab.edu.co wp-json",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -114,7 +114,7 @@
       "parameters": {
         "jsCode": "\nconst limpiar = h => String(h || '').replace(/<\\/(p|li|h\\d|tr)>/gi, '\\n').replace(/<br\\s*\\/?>/gi, '\\n').replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#8217;|&#8216;/g, \"'\").replace(/&#8220;|&#8221;|&quot;/g, '\"').replace(/&#8211;/g, '–')\n  .replace(/&#\\d+;/g, ' ').replace(/[ \\t]+/g, ' ').replace(/\\n\\s*\\n+/g, '\\n\\n').trim();\nconst reglas = [['CCD', /competencias digitales|\\bccd\\b|insignia|interacci[oó]n digital/i], ['CERTIFICACION', /certificaci[oó]n|certificado|examen|celpe|toefl|ielts|prueba de/i],\n  ['CONVOCATORIA', /convocatoria|inscripci|elecciones|beca|postula|abiertas/i], ['CURSOS', /curso|diplomado|taller|vacacional|intensivo|capacitaci/i]];\nconst temaDe = t => /ingenier[ií]a de sistemas|software|programaci|desarrollador|inteligencia artificial|\\bIA\\b|ciberseguridad|\\bdatos\\b|algoritm|computaci|\\bnube\\b|cloud/i.test(t) ? 'Ingeniería de Sistemas'\n  : /tecnolog|digital|internet|\\bapp\\b|innovaci|\\b5g\\b|startup|robot/i.test(t) ? 'Tecnología'\n  : /educaci|universidad|estudiant|beca|icetex|acad[eé]mic|docente|pregrado|posgrado/i.test(t) ? 'Educación' : 'Institucional';\nconst vistos = new Set(); const out = [];\nfor (const it of $input.all()) {\n  const p = it.json; if (!p || !p.id || vistos.has(p.id)) continue; vistos.add(p.id);\n  const titulo = limpiar(p.title?.rendered), contenido = limpiar(p.content?.rendered);\n  const base = (titulo + ' ' + contenido.slice(0, 600));\n  const etiqueta = (reglas.find(([, rx]) => rx.test(base)) || ['GENERAL'])[0];\n  out.push({ json: { id_wp: p.id, titulo, url: p.link, fecha_pub: p.date, resumen: limpiar(p.excerpt?.rendered).slice(0, 500),\n    contenido, categorias: (p.categories || []).join(','), etiqueta, fuente: 'unab.edu.co',\n    tema: temaDe(titulo + ' ' + contenido.slice(0, 600)) } });\n}\nreturn out;\n"
       },
-      "id": "14d5a82e-d76e-4048-8181-01beb7b821d7",
+      "id": "ae39dd43-13b5-47b1-95cd-d40205c624e4",
       "name": "Limpiar y etiquetar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -131,7 +131,7 @@
           "queryReplacement": "={{ [ $json.id_wp, $json.titulo, $json.url, $json.fecha_pub, $json.resumen, $json.contenido, $json.categorias, $json.etiqueta, $json.fuente, $json.tema ] }}"
         }
       },
-      "id": "4805b604-028d-4e75-9344-01509671c920",
+      "id": "7625486d-ae47-4a3a-925a-18eabb62c6e8",
       "name": "Upsert noticia",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -157,7 +157,7 @@
           },
           "conditions": [
             {
-              "id": "af3ca905-68d7-496f-98a0-17264cdb0188",
+              "id": "bb5ebe58-a576-4f30-b2b4-83d104a0d58b",
               "leftValue": "={{ $json.es_nueva }}",
               "rightValue": true,
               "operator": {
@@ -171,7 +171,7 @@
         },
         "options": {}
       },
-      "id": "f2977ecc-b79a-48cd-9dec-35867f864a4e",
+      "id": "b928e2cc-9567-4088-97cb-1c92d74e4b94",
       "name": "¿Es nueva?",
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.2,
@@ -200,7 +200,7 @@
           "timeout": 60000
         }
       },
-      "id": "80bd7044-d097-42d9-8017-cd486eb07cf2",
+      "id": "772ba290-4c64-4d8f-ba35-7f377cebae1b",
       "name": "Embeddings noticia",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -217,7 +217,7 @@
           "queryReplacement": "={{ [ $('¿Es nueva?').item.json.titulo, $('¿Es nueva?').item.json.etiqueta, '[Noticia ' + ($('¿Es nueva?').item.json.fuente || 'unab.edu.co') + ' ' + String($('¿Es nueva?').item.json.fecha_pub).slice(0,10) + ' - ' + $('¿Es nueva?').item.json.titulo + '] ' + String($('¿Es nueva?').item.json.contenido).slice(0,1500), $('¿Es nueva?').item.json.url, $json.pgvector[0] ] }}"
         }
       },
-      "id": "c327dc75-2c79-4133-a09a-dae4155a509a",
+      "id": "17b90567-9561-449f-9a18-c2b296c247b8",
       "name": "Guardar noticia en PGVector",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -236,7 +236,7 @@
       "parameters": {
         "jsCode": "\n// Noticias del día de educación, tecnología e ingeniería de sistemas (Google News, últimos 2 días) + ENTER.CO\nconst gn = q => 'https://news.google.com/rss/search?q=' + encodeURIComponent(q + ' when:2d') + '&hl=es-419&gl=CO&ceid=CO:es-419';\nreturn [\n  { json: { url: gn('educación superior Colombia universidades'), tema: 'Educación' } },\n  { json: { url: gn('tecnología Colombia'), tema: 'Tecnología' } },\n  { json: { url: gn('\"ingeniería de sistemas\" OR \"desarrollo de software\" OR \"inteligencia artificial\" Colombia'), tema: 'Ingeniería de Sistemas' } },\n  { json: { url: 'https://www.enter.co/feed/', tema: 'Tecnología' } },\n];\n"
       },
-      "id": "0cae0d8f-f36e-4245-a993-5df0e36b136a",
+      "id": "e9f01cdf-f630-4867-85fd-951782932ad2",
       "name": "Fuentes externas (RSS)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -267,7 +267,7 @@
           }
         }
       },
-      "id": "226b5a53-6a48-4e38-ba66-04c4f9be90e1",
+      "id": "0b088acc-c5d7-419d-b033-736002528c9e",
       "name": "GET feeds RSS",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -279,9 +279,9 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst temaDe = t => /ingenier[ií]a de sistemas|software|programaci|desarrollador|inteligencia artificial|\\bIA\\b|ciberseguridad|\\bdatos\\b|algoritm|computaci|\\bnube\\b|cloud/i.test(t) ? 'Ingeniería de Sistemas'\n  : /tecnolog|digital|internet|\\bapp\\b|innovaci|\\b5g\\b|startup|robot/i.test(t) ? 'Tecnología'\n  : /educaci|universidad|estudiant|beca|icetex|acad[eé]mic|docente|pregrado|posgrado/i.test(t) ? 'Educación' : 'Institucional';\nconst txt = (x, tag) => { const m = x.match(new RegExp('<' + tag + '[^>]*>([\\\\s\\\\S]*?)</' + tag + '>', 'i')); return m ? m[1] : ''; };\nconst limpia = h => String(h || '').replace(/<!\\[CDATA\\[|\\]\\]>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '\"')\n  .replace(/&#39;|&#8217;|&#8216;/g, \"'\").replace(/&#8220;|&#8221;/g, '\"').replace(/&nbsp;|&#160;/g, ' ').replace(/&#\\d+;/g, ' ').replace(/\\s+/g, ' ').trim();\nconst fnv = (s, seed) => { let h = seed >>> 0; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; };\nconst idDe = url => -((fnv(url, 2166136261) % 1048576) * 4294967296 + fnv(url, 33554467));   // id negativo: no choca con WordPress\nconst desde = Date.now() - 3 * 86400000, vistos = new Set(), out = [];\nconst fuentes = $('Fuentes externas (RSS)').all();\n$input.all().forEach((it, i) => {\n  const xml = String(it.json.xml || ''); const temaFeed = (fuentes[i] || fuentes[0]).json.tema;\n  const items = xml.split(/<item[\\s>]/i).slice(1, 9);\n  for (const raw of items) {\n    let titulo = limpia(txt(raw, 'title')); const link = limpia(txt(raw, 'link'));\n    const fecha = new Date(limpia(txt(raw, 'pubDate')));\n    if (!titulo || !link || isNaN(fecha) || fecha.getTime() < desde || vistos.has(link)) continue;\n    vistos.add(link);\n    let fuente = limpia(txt(raw, 'source'));\n    if (!fuente) { try { fuente = new URL(link).hostname.replace(/^www\\./, ''); } catch (e) { fuente = 'RSS'; } }\n    if (titulo.endsWith(' - ' + fuente)) titulo = titulo.slice(0, -(fuente.length + 3));\n    let resumen = limpia(txt(raw, 'description')).replace(titulo, '').replace(fuente, '').trim().slice(0, 400);\n    if (resumen.length < 25) resumen = titulo;\n    const tema = temaDe(titulo + ' ' + resumen) === 'Institucional' ? temaFeed : temaDe(titulo + ' ' + resumen);\n    out.push({ json: { id_wp: idDe(link), titulo, url: link, fecha_pub: fecha.toISOString(), resumen, contenido: resumen,\n      categorias: 'RSS', etiqueta: /convocatoria|beca|inscripci/i.test(titulo) ? 'CONVOCATORIA' : /curso|diplomado|taller|bootcamp/i.test(titulo) ? 'CURSOS' : /certificaci/i.test(titulo) ? 'CERTIFICACION' : 'GENERAL',\n      fuente: fuente.slice(0, 80), tema } });\n  }\n});\nreturn out.slice(0, 30);\n"
+        "jsCode": "\nconst temaDe = t => /ingenier[ií]a de sistemas|software|programaci|desarrollador|inteligencia artificial|\\bIA\\b|ciberseguridad|\\bdatos\\b|algoritm|computaci|\\bnube\\b|cloud/i.test(t) ? 'Ingeniería de Sistemas'\n  : /tecnolog|digital|internet|\\bapp\\b|innovaci|\\b5g\\b|startup|robot/i.test(t) ? 'Tecnología'\n  : /educaci|universidad|estudiant|beca|icetex|acad[eé]mic|docente|pregrado|posgrado/i.test(t) ? 'Educación' : 'Institucional';\nconst txt = (x, tag) => { const m = x.match(new RegExp('<' + tag + '[^>]*>([\\\\s\\\\S]*?)</' + tag + '>', 'i')); return m ? m[1] : ''; };\nconst limpia = h => String(h || '').replace(/<!\\[CDATA\\[|\\]\\]>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '\"')\n  .replace(/&#39;|&#8217;|&#8216;/g, \"'\").replace(/&#8220;|&#8221;/g, '\"').replace(/&nbsp;|&#160;/g, ' ').replace(/&#\\d+;/g, ' ').replace(/\\s+/g, ' ').trim();\nconst fnv = (s, seed) => { let h = seed >>> 0; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; };\nconst idDe = url => -((fnv(url, 2166136261) % 1048576) * 4294967296 + fnv(url, 33554467));   // id negativo: no choca con WordPress\nconst desde = Date.now() - 3 * 86400000, vistos = new Set(), out = [];\nconst fuentes = $('Fuentes externas (RSS)').all();\n$input.all().forEach((it, i) => {\n  const xml = String(it.json.xml || ''); const temaFeed = (fuentes[i] || fuentes[0]).json.tema;\n  const items = xml.split(/<item[\\s>]/i).slice(1, 9);\n  for (const raw of items) {\n    let titulo = limpia(txt(raw, 'title')); const link = limpia(txt(raw, 'link'));\n    const fecha = new Date(limpia(txt(raw, 'pubDate')));\n    if (!titulo || !link || isNaN(fecha) || fecha.getTime() < desde || vistos.has(link)) continue;\n    vistos.add(link);\n    let fuente = limpia(txt(raw, 'source'));\n    if (!fuente) { const h = link.match(/^https?:\\/\\/(?:www\\.)?([^\\/:?#]+)/i); fuente = h ? h[1] : 'RSS'; }\n    if (titulo.endsWith(' - ' + fuente)) titulo = titulo.slice(0, -(fuente.length + 3));\n    let resumen = limpia(txt(raw, 'description')).replace(titulo, '').replace(fuente, '').trim().slice(0, 400);\n    if (resumen.length < 25) resumen = titulo;\n    const tema = temaDe(titulo + ' ' + resumen) === 'Institucional' ? temaFeed : temaDe(titulo + ' ' + resumen);\n    out.push({ json: { id_wp: idDe(link), titulo, url: link, fecha_pub: fecha.toISOString(), resumen, contenido: resumen,\n      categorias: 'RSS', etiqueta: /convocatoria|beca|inscripci/i.test(titulo) ? 'CONVOCATORIA' : /curso|diplomado|taller|bootcamp/i.test(titulo) ? 'CURSOS' : /certificaci/i.test(titulo) ? 'CERTIFICACION' : 'GENERAL',\n      fuente: fuente.slice(0, 80), tema } });\n  }\n});\nreturn out.slice(0, 30);\n"
       },
-      "id": "c2c98343-f5c4-4d0c-ac8a-24c149383622",
+      "id": "206d8b5e-50cb-4a63-8eac-96b8704f5f7f",
       "name": "Parsear RSS",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

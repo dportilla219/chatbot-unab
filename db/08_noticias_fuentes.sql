@@ -20,4 +20,8 @@ UPDATE noticia SET tema = CASE
     ELSE 'Institucional' END
 WHERE tema IS NULL;
 
+-- Noticias RSS guardadas sin nombre de medio: se usa el dominio del enlace
+UPDATE noticia SET fuente = substring(url from '^https?://(?:www\.)?([^/:?#]+)')
+WHERE fuente = 'RSS' AND url ~ '^https?://';
+
 SELECT fuente, tema, COUNT(*) FROM noticia GROUP BY 1, 2 ORDER BY 1, 2;

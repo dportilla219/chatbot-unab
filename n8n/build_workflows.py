@@ -548,7 +548,7 @@ $input.all().forEach((it, i) => {
     if (!titulo || !link || isNaN(fecha) || fecha.getTime() < desde || vistos.has(link)) continue;
     vistos.add(link);
     let fuente = limpia(txt(raw, 'source'));
-    if (!fuente) { try { fuente = new URL(link).hostname.replace(/^www\./, ''); } catch (e) { fuente = 'RSS'; } }
+    if (!fuente) { const h = link.match(/^https?:\/\/(?:www\.)?([^\/:?#]+)/i); fuente = h ? h[1] : 'RSS'; }
     if (titulo.endsWith(' - ' + fuente)) titulo = titulo.slice(0, -(fuente.length + 3));
     let resumen = limpia(txt(raw, 'description')).replace(titulo, '').replace(fuente, '').trim().slice(0, 400);
     if (resumen.length < 25) resumen = titulo;

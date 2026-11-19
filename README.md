@@ -459,7 +459,7 @@ Cada noticia se guarda con **título, fecha, fuente, tema** (`Educación`, `Tecn
 
 ![Workflow 04 ejecutado](docs/capturas/n8n_06_scraper_rss.png)
 
-![Noticias por tema](docs/capturas/app_noticias_temas.png)
+![Noticias por tema](docs/capturas/app_noticias_temas.jpg)
 
 ## 10. Aplicación Android (Gradio)
 
@@ -502,12 +502,13 @@ Cada noticia se guarda con **título, fecha, fuente, tema** (`Educación`, `Tecn
 | Paso | Qué hacer | Pantalla |
 |---|---|---|
 | 1. Iniciar sesión | Escriba su nombre completo, su ID (`U00XXXXXX`), su carrera y su contraseña. La primera vez la contraseña es su mismo ID y la app le pide crear una nueva (8 caracteres o más, con letras y números). Deje marcado *Mantener la sesión abierta* para no volver a escribir sus datos. Para probar sin datos, toque **Entrar con perfil de prueba**. | ![](docs/capturas/manual_01_inicio_sesion.jpg) |
-| 2. Preguntar en el chat | Escriba su pregunta abajo y toque **Enviar**, o toque una sugerencia ("Mi estado y avance", "Cursos del próximo semestre", "Recomendaciones"…). Puede escribir como habla: entiende jerga como "PFU" o "rajarse una materia". **+ Nueva** empieza otra conversación. | ![](docs/capturas/manual_02_chat.jpg) |
+| 2. Preguntar en el chat | Escriba su pregunta abajo y toque **Enviar**, o toque una sugerencia ("Mi estado y avance", "Cursos del próximo semestre", "Recomendaciones"…). Puede escribir como habla: entiende jerga como "PFU" o "rajarse una materia". **+ Nueva** (arriba a la derecha) empieza otra conversación. | ![](docs/capturas/manual_02_chat.jpg) |
 | 3. Leer la respuesta | El asistente responde con sus datos (créditos, PGA, estado, alertas) y recomendaciones, y cita el artículo del Reglamento cuando aplica. Debajo aparece la ruta que usó. | ![](docs/capturas/manual_03_respuesta.jpg) |
 | 4. Historial | Lista de sus conversaciones. Toque una para abrirla y continuarla: el asistente recuerda lo que hablaron. | ![](docs/capturas/manual_04_historial.jpg) |
 | 5. Noticias | Noticias de la UNAB y del día sobre educación, tecnología e ingeniería de sistemas, con fuente y fecha. Filtre por tema con los botones de arriba. | ![](docs/capturas/manual_05_noticias.jpg) |
 | 6. Eventos | Próximas fechas del calendario UNAB (naranja) y sus eventos personales (morado). Agregue un evento con nombre, fecha y descripción; solo usted lo ve. | ![](docs/capturas/manual_06_eventos.jpg) |
-| 7. Personal | Sus datos, cursos de toda la carrera con nota, estado y profesor, y sus certificados. | ![](docs/capturas/manual_07_personal.jpg) |
+| 7. Personal | Sus datos, cursos de toda la carrera con nota, estado y profesor. | ![](docs/capturas/manual_07_personal.jpg) |
+| 7b. Certificados | Certificados de competencias digitales, inglés y cursos externos, con entidad y fecha. | ![](docs/capturas/manual_07b_certificados.jpg) |
 | 8. Materias que faltan | Materias pendientes por semestre, con las que ya puede inscribir y las que requieren prerrequisitos. | ![](docs/capturas/manual_08_materias.jpg) |
 | 9. Seguridad | Cambie su contraseña, vea los dispositivos con la sesión abierta y ciérrelos. **Cerrar sesión** sale en este dispositivo. | ![](docs/capturas/manual_09_seguridad.jpg) |
 
@@ -519,7 +520,7 @@ Cada noticia se guarda con **título, fecha, fuente, tema** (`Educación`, `Tecn
 - *Competencias digitales:* "¿Qué es la insignia?", "¿Qué cursos de competencias digitales he tomado?"
 - *Calendario y noticias:* "¿Cuándo son las inscripciones?", "¿Hay noticias de tecnología hoy?"
 
-> Las capturas de este manual son de la app en un navegador con tamaño de celular; las de la sección 10 son del celular real.
+> Las capturas de los pasos 2 y 4 a 9 son de un celular Android real (19 de noviembre de 2026); las de los pasos 1 y 3 son de la app en un navegador con tamaño de celular.
 
 ## 12. Pertinencia pedagógica
 
