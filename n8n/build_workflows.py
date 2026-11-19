@@ -155,7 +155,7 @@ w.add("Guardrails (PII + palabras clave)", "@n8n/n8n-nodes-langchain.guardrails"
 code(w, "Respuesta bloqueada", r"""
 const e = $('Normalizar entrada').first().json;
 const motivo = e.motivo || 'La consulta fue bloqueada por el módulo de seguridad (guardrails): no puedo ayudar con solicitudes que intenten saltarse las reglas, pidan datos de otros estudiantes o tengan contenido inapropiado.';
-return [{ json: { respuesta: `🛡️ ${motivo}\n\nPuedo ayudarte con tu matrícula, avance académico, plan de estudios, competencias digitales, calendario, reglamento estudiantil y noticias de la UNAB.`,
+return [{ json: { respuesta: `${motivo}\n\nPuedo ayudarte con tu matrícula, avance académico, plan de estudios, competencias digitales, calendario, reglamento estudiantil y noticias de la UNAB.`,
   intencion: 'bloqueado', bloqueado: true, motivo } }];
 """, [700, -760])
 
@@ -239,7 +239,7 @@ return [{ json: { intencion: 'noticias', contexto: ctx || 'Aún no hay noticias 
 """, [960, 420])
 
 code(w, "Fuera de alcance", r"""
-return [{ json: { respuesta: 'Soy el asistente académico de la UNAB 🎓 y solo puedo ayudarte con temas de tu vida académica: matrícula, avance del plan de estudios, proyección de semestres, competencias digitales e insignia, calendario académico, Reglamento Estudiantil y noticias de la universidad. ¿Te ayudo con alguno?', intencion: 'fuera_de_alcance', bloqueado: false } }];
+return [{ json: { respuesta: 'Soy el asistente académico de la UNAB y solo puedo ayudarte con temas de tu vida académica: matrícula, avance del plan de estudios, proyección de semestres, competencias digitales e insignia, calendario académico, Reglamento Estudiantil y noticias de la universidad. ¿Te ayudo con alguno?', intencion: 'fuera_de_alcance', bloqueado: false } }];
 """, [960, 680])
 
 SYSTEM = """Eres el Asistente Académico de la Universidad Autónoma de Bucaramanga (UNAB) para estudiantes de Ingeniería de Sistemas.
@@ -257,6 +257,7 @@ Reglas:
 - Si el mensaje es continuación del anterior (por ejemplo 'es para un amigo', '¿y cómo lo hago?'), retoma ESE tema y responde la pregunta anterior aplicada al nuevo caso. Nunca respondas algo genérico sin relación.
 - Si pregunta por otra persona (un amigo, un compañero): no des ni busques datos personales de nadie más, pero sí explica el procedimiento general (requisitos, dónde consultar, cómo matricular, a quién escribir) para que esa persona lo haga con su propio usuario.
 - Responde SIEMPRE la parte general de la pregunta (dónde consultar, cómo hacer un trámite, a quién escribir) aunque los datos personales digan que el estudiante ya cumplió; primero el dato personal en una línea y luego el procedimiento.
+- No uses emojis ni emoticones en ninguna respuesta. Usa títulos en negrita y viñetas para ordenar.
 - Memoria persistente: el historial de esta conversación contiene los mensajes anteriores de ESTE estudiante, también de sesiones pasadas (aunque haya cerrado sesión o recargado la app). En cada mensaje anterior, lo que el estudiante escribió aparece después de 'Pregunta del estudiante (tal como la escribió):'. Úsalo para preguntas de seguimiento ('¿y cuál de esos?') y cuando pregunte qué te consultó antes. Nunca digas que no tienes acceso a conversaciones anteriores ni que cada mensaje es independiente.
 - Herramientas MCP disponibles: estado_academico, historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales, plan_de_estudios, buscar_reglamento_y_documentos, calendario_academico, noticias_recientes.
 Fecha de hoy: {{ $('Normalizar entrada').item.json.fecha_hoy }}."""
