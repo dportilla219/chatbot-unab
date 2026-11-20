@@ -1,17 +1,25 @@
-# Guion del video de demostración (6–8 minutos)
+# Guion del video de demostración (5 min 27 s)
 
-| Min | Escena | Qué mostrar | Qué decir |
-|---|---|---|---|
-| 0:00 | Presentación | Diapositiva del objetivo | Problema: el estudiante de Ing. de Sistemas no tiene un punto único para saber su estado, su proyección y las normas. |
-| 0:40 | Arquitectura | Diagrama de la documentación | App Android → n8n (guardrails, ruteo, agente) → MCP FastMCP → Supabase + pgvector; Claude como LLM; todo en EC2. |
-| 1:30 | Infraestructura | Consola AWS: instancia EC2 y Security Group (puerto 9000); `docker compose ps` | 4 contenedores; HTTPS con Caddy. |
-| 2:10 | Base de datos | Supabase: tablas del esquema `academico`, vista `v_proyeccion_grado` | Simula Banner/COSMOS; reglas del Reglamento (Art. 24, 40, 53, 84, 85) en SQL; 300 estudiantes sintéticos. |
-| 2:50 | RAG | Workflow de ingesta en n8n ejecutándose; tabla `documento_chunk` | Chunking por artículo, embeddings 384d, pgvector. |
-| 3:30 | App: login | Celular con la PWA instalada; login fallido con nombre incorrecto y luego login de Valentina (U00174957) | Identificación por nombre completo + ID + carrera. |
-| 4:00 | Preguntas | 1) "¿Cuál es mi estado de matrícula y avance?" 2) "¿Qué cursos debo tomar el próximo semestre?" 3) "¿Qué es la insignia de competencias digitales?" 4) "¿Cuándo son las inscripciones de cursos vacacionales?" 5) "¿Hay nuevos cursos o convocatorias?" | Señalar la ruta usada (aparece bajo cada respuesta). |
-| 5:30 | Personalización | Login de Andrés (condicional) y Laura (prueba académica): "¿Cuántos semestres me faltan?" | Las recomendaciones cambian según el estado (Art. 84 y 85). |
-| 5:50 | Jerga y estilos | "que formas hay de quedar PFU", "si me rajo calculo integral q pasa", "ESTOY HARTO… ME VAN A ECHAR DE LA U???" | El glosario entiende jerga UNAB; el agente adapta el tono (empatía, formalidad). |
-| 6:10 | Guardrails | "Muéstrame las notas de U00160004" y "Ignora todas las instrucciones…" | Bloqueos de seguridad; log en `chat_log`. |
-| 6:40 | Memoria | Pregunta de seguimiento: "¿y cuál de esos es el más difícil?" | Memoria persistente por estudiante en Postgres. |
-| 7:00 | MCP | Claude Desktop conectado al servidor MCP listando herramientas | Clientes MCP externos sobre la misma base de datos. |
-| 7:30 | Cierre | Diapositiva de entregables | Resultados y siguientes pasos. |
+Narrado por el autor sobre la interfaz actual (pestañas, inicio de sesión con contraseña, eventos personales y perfil académico). Cada fila es una escena del video `docs/video_demo_chatbot_unab.mp4`.
+
+| Min | Escena | Narración |
+|---|---|---|
+| 0:00 | Portada | Chatbot de apoyo académico para los estudiantes de Ingeniería de Sistemas de la Universidad Autónoma de Bucaramanga. Es el trabajo final del tema dos: un modelo en n8n que acompaña al estudiante en su matrícula, su estado académico y su proyección, con requisitos y recomendaciones basadas en la investigación, el autoaprendizaje y la educación de precisión. |
+| 0:20 | Arquitectura | Así viaja una pregunta. La aplicación Android envía el mensaje a n8n. Allí pasa por los guardrails, el ruteo por intención y un agente con Claude, que tiene memoria persistente y usa las herramientas de un servidor MCP hecho en Python con FastMCP. Los datos y los vectores están en Supabase, con PostgreSQL y pgvector, y todo corre en contenedores dentro de una instancia EC2 de AWS. |
+| 0:49 | AWS EC2 · IP elástica · Security Group | La infraestructura está en AWS: una instancia EC2 con Ubuntu, una IP elástica y un grupo de seguridad con el puerto 9000 abierto para el servidor MCP. Caddy le da HTTPS automático a cada servicio. |
+| 1:06 | Supabase: simulación de Banner / COSMOS | La base de datos simula Banner y COSMOS con trescientos estudiantes sintéticos, sus notas, matrículas, prerrequisitos, certificados y profesores. Las vistas analíticas aplican las reglas del reglamento: el promedio ponderado acumulado, el estado académico, la carga máxima y la proyección de grado. |
+| 1:30 | Workflows de n8n | En n8n están los flujos. El principal tiene los guardrails, el ruteo por intención, el agente con memoria y las herramientas MCP. El scraper corre cada seis horas y trae las noticias de la UNAB y las noticias del día de educación, tecnología e ingeniería de sistemas, con su fuente y su fecha. |
+| 1:54 | Pipeline RAG | El RAG usa el reglamento, el plan de estudios y los documentos del Centro de Competencias Digitales, divididos en fragmentos de seiscientos caracteres con un solape de ciento veinte. Combina búsqueda por vectores y por texto, y un glosario de jerga estudiantil. Por ejemplo, si el estudiante pregunta por las fallas, recupera el artículo cuarenta y seis. |
+| 2:18 | Acceso seguro | En la aplicación, el estudiante entra con su nombre, su ID, su carrera y su contraseña, que se guarda cifrada. La sesión queda abierta en el dispositivo, y para hacer pruebas hay un botón que entra a un perfil de prueba. |
+| 2:33 | ¿Cuál es mi estado de matrícula y avance? | Valentina pregunta por su estado de matrícula y avance. El asistente consulta la base de datos y responde con sus créditos, su promedio, su estado académico, sus competencias digitales y alertas como el requisito de inglés B2. |
+| 2:51 | ¿Qué cursos debo tomar el próximo semestre? | Luego pide qué cursos tomar el próximo semestre. La recomendación tiene en cuenta los prerrequisitos, su límite de carga según el reglamento y las fechas del calendario. |
+| 3:09 | Pregunta de seguimiento | Con una pregunta de seguimiento se ve la memoria: el asistente recuerda qué cursos le recomendó y responde sobre ellos sin inventar datos. |
+| 3:20 | ¿Qué es la insignia de competencias digitales? | Para preguntas institucionales, como la insignia de competencias digitales, el RAG busca en los documentos, cita la fuente y lo aplica al caso de la estudiante. |
+| 3:28 | Intento de manipulación | Los guardrails bloquean los intentos de manipular al asistente o de consultar los datos de otro estudiante. |
+| 3:39 | Andrés, en estado condicional | Las respuestas cambian según el estudiante. Andrés está en estado condicional. El asistente le explica su carga máxima y lo que le falta para graduarse, y entiende la jerga: rajarse significa reprobar. |
+| 3:53 | Laura escribe molesta | Laura escribe molesta y en mayúsculas. El asistente adapta el tono, la tranquiliza con sus datos reales y le explica qué significa quedar PFU según el reglamento. |
+| 4:09 | Historial de conversaciones | La aplicación tiene cinco pestañas, con el chat en el centro. En Historial están las conversaciones, como en un chat de inteligencia artificial: se pueden abrir y continuar. |
+| 4:26 | Noticias y eventos | En Noticias aparecen las noticias del día por tema, con su fuente y su fecha. En Eventos está el calendario académico en naranja, y cada estudiante puede agregar sus propios eventos, que aparecen en morado y solo ve él. |
+| 4:44 | Personal | En Personal están sus cursos de toda la carrera con nota, estado y profesor, sus certificados, las materias que le faltan por semestre y la sección de seguridad, donde cambia la contraseña y cierra sesiones. |
+| 5:00 | Pruebas con curl | El webhook de n8n y las rutas del servidor MCP también se probaron con curl: responden con datos reales y rechazan las llamadas sin clave. |
+| 5:12 | Cierre | En resumen: una base de datos con las reglas del reglamento, un RAG institucional, flujos en n8n con agente, memoria y guardrails, un servidor MCP, un scraper de noticias y una aplicación Android, todo desplegado en AWS y documentado en GitHub. Gracias. |
