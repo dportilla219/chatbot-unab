@@ -103,7 +103,7 @@ URLs del despliegue: `https://app.3-222-163-239.sslip.io` (app) · `https://n8n.
 | Criterio (peso) | Qué pide el nivel *Excelente* | Evidencia en este repositorio |
 |---|---|---|
 | Arquitectura del sistema (10 %) | Diagrama completo, flujo de datos y justificación | [Sección 1](#1-arquitectura): diagrama con n8n, PostgreSQL, agente/LLM, RAG, MCP, app y scraper; flujo de una consulta; tabla de **decisiones de diseño** |
-| Implementación de RAG (15 %) | Pipeline, documentos, justificación de chunks, overlap y embeddings, recuperación demostrada | [Sección 5](#5-rag-institucional): diagrama del pipeline, documentos, tabla de parámetros justificados y consultas con sus fragmentos recuperados |
+| Implementación de RAG (15 %) | Pipeline, documentos, justificación de chunks, overlap y embeddings, recuperación demostrada | [Sección 5](#5-rag-institucional): diagrama del pipeline, documentos, tabla de parámetros justificados, consultas con sus fragmentos recuperados y [evaluación con 30 preguntas](docs/evaluacion_rag.md) (87 % de acierto en los 5 primeros, MRR 0,744) |
 | Base de datos PostgreSQL (10 %) | Scripts de creación e inserción, modelo coherente, acceso al servidor con tablas y datos | [Sección 4](#4-base-de-datos-simulación-bannercosmos): modelo ER, scripts `db/01`–`08`, consultas de ejemplo y capturas de Supabase |
 | Workflows de n8n (15 %) | Agente, LLM, memoria, herramientas, MCP y guardrails; ejecución exitosa | [Sección 6](#6-workflows-de-n8n) y [8](#8-guardrails-y-memoria): workflows importables y capturas de ejecuciones reales |
 | Servidor MCP y webhook (10 %) | Herramientas/endpoints documentados; webhook probado con evidencia | [Sección 7](#7-servidor-mcp-fastmcp): 11 herramientas y todas las rutas, `curl`, colección de Postman, `deploy/probar_webhook.sh` y su salida |
@@ -315,6 +315,16 @@ flowchart LR
 | Fusión | *Reciprocal Rank Fusion*, `1/(60 + posición)` | Combina listas sin calibrar puntajes; k = 60 es el valor propuesto por Cormack et al. (2009). |
 | Fragmentos al agente | 8 | Suficiente contexto sin saturar el prompt. |
 | Glosario de jerga | "PFU", "rajarse", "el promedio"… | Se expanden a términos del Reglamento antes de buscar. |
+
+**Evaluación medible** ([`docs/evaluacion_rag.md`](docs/evaluacion_rag.md), script `mcp_server/evaluar_rag.py`, medida en la EC2 el 20 de noviembre): 30 preguntas con respuesta conocida (22 del Reglamento, 3 con jerga y 5 del CCD y el plan). Una pregunta cuenta como acertada si el artículo o la sección correcta aparece entre los k primeros fragmentos.
+
+| Configuración | Acierto @1 | Acierto @3 | Acierto @5 | MRR |
+|---|---|---|---|---|
+| Vectorial | 15/30 (50 %) | 18/30 (60 %) | 21/30 (70 %) | 0,572 |
+| Híbrida (RRF) | 17/30 (57 %) | 21/30 (70 %) | 23/30 (77 %) | 0,648 |
+| **Híbrida + glosario (la del asistente)** | **20/30 (67 %)** | **24/30 (80 %)** | **26/30 (87 %)** | **0,744** |
+
+Cada capa mejora la anterior: la búsqueda de texto encuentra términos exactos que los embeddings confunden ("habilitación", "Cum Laude") y el glosario traduce la jerga ("PFU", "me rajé una materia"). Los 4 fallos y su explicación están en el documento de la evaluación.
 
 **Recuperación demostrada con consultas reales** (ruta pública `GET /evidencias` del servidor MCP; los resultados completos se ven en `https://mcp.3-222-163-239.sslip.io/evidencias`):
 
