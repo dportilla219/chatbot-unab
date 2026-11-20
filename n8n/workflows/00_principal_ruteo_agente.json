@@ -9,7 +9,7 @@
         "width": 440,
         "color": 5
       },
-      "id": "312ae1cc-4f1d-46cd-bec0-7a9ce229d479",
+      "id": "0d236154-6bee-4c1c-8238-deeae76c9561",
       "name": "Nota 0",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -25,7 +25,7 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "f5c9de9c-741a-415e-ba41-9087e6647c79",
+      "id": "623706c9-8c94-4b78-bfa4-99df3abc7484",
       "name": "Webhook chat",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -33,13 +33,13 @@
         -600,
         120
       ],
-      "webhookId": "82a01d80-d4f1-4c25-9b5c-1908982e38fa"
+      "webhookId": "eae9bb87-deba-4843-a720-b9268c9f6347"
     },
     {
       "parameters": {
         "jsCode": "\n// Guardrail determinístico de entrada\nconst b = $input.first().json.body ?? $input.first().json;\nconst hdr = $input.first().json.headers || {};\nconst token = $env.API_TOKEN || '';\nconst id = String(b.id_estudiante || '').trim().toUpperCase();\nlet mensaje = String(b.mensaje || '').replace(/\\s+/g, ' ').trim().slice(0, 1200);\nconst motivos = [];\nif (token && hdr['x-api-key'] !== token) motivos.push('Acceso no autorizado: el chat solo acepta mensajes desde la app oficial con sesión iniciada.');\nif (!/^U\\d{8}$/.test(id)) motivos.push('Sesión inválida: falta un ID estudiantil válido.');\nif (!mensaje) motivos.push('Mensaje vacío.');\nconst otros = (mensaje.match(/U\\d{8}/gi) || []).map(x => x.toUpperCase()).filter(x => x !== id);\nif (otros.length) motivos.push('Solo puedo consultar la información del estudiante que inició sesión.');\nif (/(ignora|olvida|ignore).{0,30}(instrucciones|reglas|instructions)|system prompt|act[uú]a como|modo desarrollador|DAN\\b/i.test(mensaje))\n  motivos.push('La solicitud intenta modificar las reglas del asistente.');\nif (/\\b(?:\\d[ -]*?){13,16}\\b/.test(mensaje)) motivos.push('No compartas números de tarjeta ni datos financieros en el chat.');\nif (/(contrase[nñ]a|password|clave).{0,20}(de|del)?.{0,20}(portal|cosmos|banner|correo)/i.test(mensaje))\n  motivos.push('Nunca compartas tus contraseñas institucionales.');\n// Glosario de jerga estudiantil UNAB -> términos del Reglamento (mejora el ruteo y la búsqueda RAG)\nconst GLOSARIO = [\n  [/\\bpfu\\b|por\\s*fuera\\s*(de\\s*la\\s*(u|universidad))?|quedar\\s*(por\\s*)?fuera|me\\s*sacan\\s*de\\s*la\\s*u|perder\\s*el\\s*cupo/i, 'PFU = quedar por fuera de la universidad: estado Fuera del Programa, pérdida del derecho de renovar matrícula por bajo rendimiento académico (prueba académica, PGA inferior a 3.00, Programa de Recuperación Académica)'],\n  [/\\b(raj|tir[eéa]|jal[eéa]|vol[eéa]|perd[ií]|perder|pierdo|quem[eéa])\\w*\\s*(una\\s*|la\\s*|el\\s*|\\d+\\s*)?(materia|materias|curso|cursos|clase|ramo)/i, 'reprobar un curso o asignatura (nota inferior a 3.0), repetir curso, nota más alta'],\n  [/\\b(me\\s+)?(raj|jal|quem|tir|vol)(o|e|é|ar|aron|ando|ada|ado)\\b(?!.*materia)/i, 'reprobar un curso o asignatura (nota inferior a 3.0), repetir curso, nota más alta'],\n  [/habilit/i, 'prueba de habilitación'],\n  [/cancel\\w*\\s*(una\\s*|la\\s*|las\\s*)?(materia|materias|curso|cursos|semestre)/i, 'cancelación ordinaria o extraordinaria de cursos'],\n  [/\\b(el\\s*)?promedio\\b|\\bpga\\b|\\bppa\\b/i, 'Promedio General Acumulado (PGA) y Promedio del Periodo Académico (PPA)'],\n  [/condicional/i, 'estado académico condicional (PGA entre 3.00 y 3.20)'],\n  [/\\ben\\s*prueba\\b|prueba\\s*acad/i, 'prueba académica, Programa de Recuperación Académica'],\n  [/pasant[ií]a|\\bpr[aá]ctica(s)?\\b/i, 'práctica profesional o práctica académica'],\n  [/fallas|faltas|inasistencia|no\\s*ir\\s*a\\s*clase/i, 'fallas por inasistencia (20 %)'],\n  [/cart[oó]n|diploma|graduar\\w*|graduaci[oó]n|\\bgrado\\b/i, 'requisitos de grado (Art. 67)'],\n  [/\\binfo\\b|inform[aá]tica|compu|ofim[aá]tica|excel|word/i, 'competencias digitales (antes cursos de informática), rutas del CCD'],\n  [/homolog|convalid|reconoc\\w*\\s*(materia|curso)/i, 'homologación o reconocimiento de cursos'],\n  [/doble\\s*(titulaci[oó]n|programa|carrera)|segunda\\s*carrera/i, 'segundo programa académico (30 % de créditos y PGA 3.50)'],\n  [/\\bpagar\\s*(la\\s*)?(u|matr[ií]cula|semestre)|cup[oó]n|recargo/i, 'pago de matrícula y fechas de pago'],\n  [/\\b(parcial|parciales|cortes?|finales?)\\b/i, 'evaluación del aprendizaje: cortes del 30 %, 30 % y 40 %'],\n  [/reserva\\s*(de\\s*)?cupo|congelar|aplazar\\s*(el\\s*)?semestre|retirarme/i, 'reserva de cupo, retiro, reintegro'],\n];\nconst expansiones = GLOSARIO.filter(([rx]) => rx.test(mensaje)).map(([, t]) => t);\nconst mensaje_busqueda = expansiones.length ? `${mensaje} (${expansiones.join('; ')})` : mensaje;\nreturn [{ json: {\n  // Cada conversación tiene su propia memoria; la clave siempre empieza con el ID del estudiante\n  sessionId: (() => { const c = String(b.sessionId || id); return c.startsWith(id) ? c : `${id}:${c}`; })(), id_estudiante: id, nombre: String(b.nombre || ''),\n  programa: String(b.programa || 'Ingeniería de Sistemas'), mensaje, mensaje_busqueda, glosario: expansiones.join('; '),\n  bloqueado: motivos.length > 0, motivo: motivos.join(' '),\n  fecha_hoy: $now.setZone('America/Bogota').toFormat('yyyy-MM-dd')\n}}];\n"
       },
-      "id": "7a948158-7ee0-4791-9219-8a5b970ebcb3",
+      "id": "ca7cd581-8283-48b5-be47-c2134e7f89bd",
       "name": "Normalizar entrada",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -59,7 +59,7 @@
           },
           "conditions": [
             {
-              "id": "09ec58f1-6930-441d-9ecb-a2ffcfe27811",
+              "id": "ac533d3c-6d9f-4089-8283-66c7612af5f6",
               "leftValue": "={{ $json.bloqueado }}",
               "rightValue": true,
               "operator": {
@@ -73,7 +73,7 @@
         },
         "options": {}
       },
-      "id": "b378cf3b-f02d-498f-bb55-100433404135",
+      "id": "0d9fe9a0-e2a8-421d-aeb2-b47e1fe81579",
       "name": "¿Bloqueado por reglas?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -100,7 +100,7 @@
           }
         }
       },
-      "id": "487b008c-c6e7-4b3a-88cc-5a740d88414b",
+      "id": "6d37b4b4-f9fa-49df-b2a4-523c89c21391",
       "name": "Guardrails (PII + palabras clave)",
       "type": "@n8n/n8n-nodes-langchain.guardrails",
       "typeVersion": 2,
@@ -113,7 +113,7 @@
       "parameters": {
         "jsCode": "\nconst e = $('Normalizar entrada').first().json;\nconst motivo = e.motivo || 'La consulta fue bloqueada por el módulo de seguridad (guardrails): no puedo ayudar con solicitudes que intenten saltarse las reglas, pidan datos de otros estudiantes o tengan contenido inapropiado.';\nreturn [{ json: { respuesta: `${motivo}\\n\\nPuedo ayudarte con tu matrícula, avance académico, plan de estudios, competencias digitales, calendario, reglamento estudiantil y noticias de la UNAB.`,\n  intencion: 'bloqueado', bloqueado: true, motivo } }];\n"
       },
-      "id": "bb9630f4-3a8f-4082-8b32-3fcd81f73d4d",
+      "id": "396abac3-c254-4644-9021-331efb60db98",
       "name": "Respuesta bloqueada",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -159,7 +159,7 @@
           "systemPromptTemplate": "Eres el enrutador del asistente académico de la UNAB. Clasifica el mensaje del estudiante en una de estas categorías: {categories}. Usa el formato indicado. No expliques, solo devuelve el JSON. Si el mensaje es una pregunta de seguimiento corta o ambigua (p. ej. '¿y cuál de esos?'), clasifícala como consulta_general."
         }
       },
-      "id": "f5c88e5d-089b-45f4-ad35-4921c399e671",
+      "id": "e5f54687-f40c-4d09-9a09-af504349b86e",
       "name": "Ruteo por intención",
       "type": "@n8n/n8n-nodes-langchain.textClassifier",
       "typeVersion": 1.1,
@@ -182,7 +182,7 @@
           "temperature": 0
         }
       },
-      "id": "42549821-ac6e-4cae-96b4-db7baf526630",
+      "id": "eea58b18-397f-4257-b524-a706ab35b179",
       "name": "Claude rápido (clasificador)",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.3,
@@ -204,7 +204,7 @@
         "width": 460,
         "color": 6
       },
-      "id": "29dae3dc-3628-40ce-8442-b205fe0d3c93",
+      "id": "bacff41f-cf02-4b79-8435-3e521f88b02f",
       "name": "Nota 8",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -224,7 +224,7 @@
           "timeout": 30000
         }
       },
-      "id": "a8a4397d-808e-4fcb-8748-93d02c3d0f86",
+      "id": "7c817f2d-6616-4afd-9cda-0c368e4f056a",
       "name": "01 Búsqueda RAG (pgvector)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -238,7 +238,7 @@
       "parameters": {
         "jsCode": "\nconst r = $input.first().json.resultados || [];\nconst ctx = r.map((d, i) => `[${i+1}] (${d.fuente} | ${d.seccion || d.titulo} | similitud ${d.similitud})\\n${d.contenido}`).join('\\n\\n');\nreturn [{ json: { intencion: 'consulta_general', contexto: ctx || 'Sin resultados en la base documental.',\n  instruccion: 'Responde con los fragmentos recuperados (RAG) y cita el artículo o la fuente entre paréntesis. Si los fragmentos no bastan, ANTES de decir que no sabes usa las herramientas MCP: plan_de_estudios (materias, semestres, créditos, prerrequisitos), competencias_digitales (rutas, insignia, prueba diagnóstica, homologaciones), buscar_reglamento_y_documentos con otras palabras, calendario_academico. Si la pregunta es en primera persona (puedo, mi, me, tengo), consulta también los datos del estudiante (estado_academico, proyeccion_y_recomendaciones) y responde para su caso. Solo si nada de eso tiene la respuesta, dilo y sugiere a quién acudir.' } }];\n"
       },
-      "id": "34b3d548-7d8f-4af1-a2d1-c1427486c478",
+      "id": "5c44a00f-7e34-414e-8934-139a74a2db35",
       "name": "01 Contexto RAG",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -254,7 +254,7 @@
         "width": 460,
         "color": 6
       },
-      "id": "680074c9-bfb5-4dfc-b0a9-eda4ac82d1d2",
+      "id": "b1384af2-4dd4-4d6a-a126-980d4d0f44c8",
       "name": "Nota 11",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -275,7 +275,7 @@
           "timeout": 20000
         }
       },
-      "id": "090081c1-123a-4d91-941f-9850b159c059",
+      "id": "7b1f7ff5-f63e-4679-8138-a6b5f52c0975",
       "name": "02 Leer Google Sheet (calendario)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -289,7 +289,7 @@
       "parameters": {
         "jsCode": "\nconst csv = String($input.first().json.data || '');\nconst hoy = $('Normalizar entrada').first().json.fecha_hoy;\nfunction parse(line){ const out=[]; let cur='', q=false; for (const ch of line){ if(ch=='\"'){q=!q;continue;} if(ch==','&&!q){out.push(cur);cur='';} else cur+=ch;} out.push(cur); return out; }\nconst lines = csv.split(/\\r?\\n/).filter(l => l.trim());\nlet filas = [];\nif (lines.length > 1) {\n  const h = parse(lines[0]).map(x => x.trim());\n  filas = lines.slice(1).map(l => Object.fromEntries(parse(l).map((v, i) => [h[i], v.trim()])));\n}\nconst proximas = filas.filter(f => (f.fecha_fin || f.fecha_inicio) >= hoy).sort((a,b) => a.fecha_inicio.localeCompare(b.fecha_inicio));\nconst ctx = proximas.map(f => `- ${f.actividad} | ${f.categoria} | ${f.fecha_inicio}${f.fecha_fin && f.fecha_fin!==f.fecha_inicio ? ' a '+f.fecha_fin : ''} | Dirigido a: ${f.dirigido_a} | Fuente: ${f.fuente}`).join('\\n');\nreturn [{ json: { intencion: 'calendario',\n  contexto: ctx ? `Hoy es ${hoy}. Actividades vigentes o próximas del calendario académico (Google Sheets):\\n${ctx}` : 'No se pudo leer el Google Sheet; usa la herramienta calendario_academico del MCP.',\n  instruccion: 'Responde con las fechas exactas relevantes a la pregunta, en orden cronológico. Indica si la fecha es sintética o tomada de una publicación de unab.edu.co según la columna Fuente.' } }];\n"
       },
-      "id": "cf118c2c-a760-4c88-b5ff-aa995970cf38",
+      "id": "3f6a8aa0-9a83-422e-989c-156ca276acdf",
       "name": "02 Contexto calendario",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -305,7 +305,7 @@
         "width": 460,
         "color": 6
       },
-      "id": "e87c24e9-d5ac-462c-9121-83dd7df19866",
+      "id": "73f0f810-28c1-4eea-9c83-78053a84747e",
       "name": "Nota 14",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -322,7 +322,7 @@
           "queryReplacement": "={{ $('Normalizar entrada').item.json.id_estudiante }}"
         }
       },
-      "id": "e6c28154-2c5f-4df1-a200-16db9da4176e",
+      "id": "dd72c345-b4fa-4c6a-b185-32b3b5eb0a98",
       "name": "03 Consultar BD estudiante",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -339,9 +339,9 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst d = $input.first().json;\nreturn [{ json: { intencion: 'historial_personal', contexto: JSON.stringify(d, null, 1).slice(0, 9000),\n  instruccion: 'Responde de forma personalizada con los datos del estudiante. Para cursos realizados, notas por periodo, asignaturas pendientes o propuesta del próximo semestre usa las herramientas MCP (historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales). Da recomendaciones concretas para el éxito académico.' } }];\n"
+        "jsCode": "\nconst d = $input.first().json;\nreturn [{ json: { intencion: 'historial_personal', contexto: JSON.stringify(d, null, 1).slice(0, 9000),\n  instruccion: 'Responde de forma personalizada con los datos del estudiante. Para cursos realizados, notas por periodo, asignaturas pendientes o propuesta del próximo semestre usa las herramientas MCP (historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales). Si pregunta qué pasaría con ciertas notas o qué nota necesita para salir de condicional o no quedar en prueba, usa simular_notas. Da recomendaciones concretas para el éxito académico.' } }];\n"
       },
-      "id": "a90d0976-4c65-4cff-a343-7226baa67cab",
+      "id": "d8b48ee3-2b0e-4844-8aad-394dd1a53d9f",
       "name": "03 Contexto historial",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -357,7 +357,7 @@
         "width": 460,
         "color": 6
       },
-      "id": "0ec03f47-e021-4194-9a21-7b59ef588822",
+      "id": "1645cc41-d400-479f-b3f0-0bbd49e7592a",
       "name": "Nota 17",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -372,7 +372,7 @@
         "query": "SELECT titulo, to_char(fecha_pub,'YYYY-MM-DD') AS fecha, etiqueta, fuente, tema, left(coalesce(contenido,resumen), 500) AS texto, url\nFROM academico.noticia ORDER BY fecha_pub DESC NULLS LAST LIMIT 12;",
         "options": {}
       },
-      "id": "dc7bd47d-7bfb-4306-b694-c5b5c6aa46f4",
+      "id": "f855319d-48d9-4b91-992b-6999c18ca8bd",
       "name": "04 Consultar noticias",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -392,7 +392,7 @@
       "parameters": {
         "jsCode": "\nconst n = $input.all().map(i => i.json).filter(x => x.titulo);\nconst ctx = n.map(x => `- [${x.fecha}] ${x.fuente} · ${x.tema || ''} (${x.etiqueta}) ${x.titulo}\\n  ${x.texto}\\n  Enlace: ${x.url}`).join('\\n');\nreturn [{ json: { intencion: 'noticias', contexto: ctx || 'Aún no hay noticias cargadas: ejecuta el workflow 04 (scraper).',\n  instruccion: 'Resume las noticias más relevantes para la pregunta (nuevos cursos, convocatorias, certificaciones, educación, tecnología, ingeniería de sistemas). Para cada una indica la fuente (medio), la fecha y el enlace. Si pide noticias de un tema, usa noticias_recientes con ese tema.' } }];\n"
       },
-      "id": "226dcc34-9aa6-4f4e-b8c9-857ca4ff3493",
+      "id": "9104b5f7-d835-4fee-ade6-0ad209a47799",
       "name": "04 Contexto noticias",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -405,7 +405,7 @@
       "parameters": {
         "jsCode": "\nreturn [{ json: { respuesta: 'Soy el asistente académico de la UNAB y solo puedo ayudarte con temas de tu vida académica: matrícula, avance del plan de estudios, proyección de semestres, competencias digitales e insignia, calendario académico, Reglamento Estudiantil y noticias de la universidad. ¿Te ayudo con alguno?', intencion: 'fuera_de_alcance', bloqueado: false } }];\n"
       },
-      "id": "98f9390d-9eab-4197-9359-7ce0da831908",
+      "id": "39b8d926-4c8e-47f4-9961-b62259a2e95f",
       "name": "Fuera de alcance",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -419,11 +419,11 @@
         "promptType": "define",
         "text": "=Estudiante: {{ $('Normalizar entrada').item.json.nombre }} ({{ $('Normalizar entrada').item.json.id_estudiante }}) - {{ $('Normalizar entrada').item.json.programa }}\nIntención detectada: {{ $json.intencion }}\n\nInstrucción para esta ruta: {{ $json.instruccion }}\n\nContexto recuperado:\n{{ $json.contexto }}\n\nJerga detectada en la pregunta: {{ $('Normalizar entrada').item.json.glosario || 'ninguna' }}{{ $('Unir seguimiento').item.json.seguimiento ? '\\n\\nEste mensaje es continuación del anterior. Pregunta anterior: ' + $('Unir seguimiento').item.json.pregunta_anterior + '\\nInicio de tu respuesta anterior: ' + $('Unir seguimiento').item.json.respuesta_anterior : '' }}\n\nPregunta del estudiante (tal como la escribió): {{ $('Normalizar entrada').item.json.mensaje }}",
         "options": {
-          "systemMessage": "=Eres el Asistente Académico de la Universidad Autónoma de Bucaramanga (UNAB) para estudiantes de Ingeniería de Sistemas.\nObjetivo: apoyar al estudiante en su matrícula, estado académico actual y proyección, con requisitos y recomendaciones para tener éxito (investigación, autoaprendizaje y educación de precisión).\n\nReglas:\n- Responde en el idioma del estudiante (por defecto español), tono cercano y profesional, con viñetas cortas y en negrita los datos clave. Adapta el largo: a preguntas cortas o informales, respuestas breves y directas.\n- Los estudiantes escriben informal, con errores, sin tildes, en mayúsculas, con emojis o jerga. Interpreta la intención. Jerga UNAB frecuente: PFU = quedar por fuera de la universidad (Fuera del Programa por bajo rendimiento); rajar/perder/tirarse/volarse una materia = reprobar; el promedio = PGA; estar en prueba = prueba académica; la práctica = práctica profesional; cancelar materias = cancelación de cursos; info = competencias digitales; COSMOS/MiPortalU/CESAF = portales de trámites; Punto U = atención al estudiante. Si un término no es claro, pregunta brevemente qué quiso decir.\n- Si el estudiante está molesto o angustiado, empieza reconociendo su situación con empatía y luego da pasos concretos.\n- Solo puedes consultar datos del estudiante autenticado (id {{ $('Normalizar entrada').item.json.id_estudiante }}). Nunca uses otro ID en las herramientas.\n- Basa las normas en el Reglamento Estudiantil de Pregrado UNAB (2019) y cita el artículo. Si no tienes la información, dilo y remite a: Punto U (agentedeservicios@unab.edu.co, WhatsApp 322 905 7020), CCD (ccdigital@unab.edu.co) o el director de programa.\n- No inventes notas, fechas ni normas. Los datos de estudiantes son sintéticos (simulan Banner/COSMOS).\n- Cuando sea útil, cierra con 1-3 recomendaciones accionables (asesoría académica, Bienestar, rutas de competencias digitales, inglés B2, carga de créditos).\n- Cuando el estudiante pida recomendaciones, consejos o cómo tener éxito, usa proyeccion_y_recomendaciones y organiza la respuesta en los tres ejes del programa: **Investigación**, **Autoaprendizaje** y **Educación de precisión** (basada en sus propios datos).\n- Si el mensaje es continuación del anterior (por ejemplo 'es para un amigo', '¿y cómo lo hago?'), retoma ESE tema y responde la pregunta anterior aplicada al nuevo caso. Nunca respondas algo genérico sin relación.\n- Si pregunta por otra persona (un amigo, un compañero): no des ni busques datos personales de nadie más, pero sí explica el procedimiento general (requisitos, dónde consultar, cómo matricular, a quién escribir) para que esa persona lo haga con su propio usuario.\n- Responde SIEMPRE la parte general de la pregunta (dónde consultar, cómo hacer un trámite, a quién escribir) aunque los datos personales digan que el estudiante ya cumplió; primero el dato personal en una línea y luego el procedimiento.\n- No uses emojis ni emoticones en ninguna respuesta. Usa títulos en negrita y viñetas para ordenar.\n- Memoria persistente: el historial de esta conversación contiene los mensajes anteriores de ESTE estudiante, también de sesiones pasadas (aunque haya cerrado sesión o recargado la app). En cada mensaje anterior, lo que el estudiante escribió aparece después de 'Pregunta del estudiante (tal como la escribió):'. Úsalo para preguntas de seguimiento ('¿y cuál de esos?') y cuando pregunte qué te consultó antes. Nunca digas que no tienes acceso a conversaciones anteriores ni que cada mensaje es independiente.\n- Herramientas MCP disponibles: estado_academico, historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales, plan_de_estudios, buscar_reglamento_y_documentos, calendario_academico, noticias_recientes.\nFecha de hoy: {{ $('Normalizar entrada').item.json.fecha_hoy }}.",
+          "systemMessage": "=Eres el Asistente Académico de la Universidad Autónoma de Bucaramanga (UNAB) para estudiantes de Ingeniería de Sistemas.\nObjetivo: apoyar al estudiante en su matrícula, estado académico actual y proyección, con requisitos y recomendaciones para tener éxito (investigación, autoaprendizaje y educación de precisión).\n\nReglas:\n- Responde en el idioma del estudiante (por defecto español), tono cercano y profesional, con viñetas cortas y en negrita los datos clave. Adapta el largo: a preguntas cortas o informales, respuestas breves y directas.\n- Los estudiantes escriben informal, con errores, sin tildes, en mayúsculas, con emojis o jerga. Interpreta la intención. Jerga UNAB frecuente: PFU = quedar por fuera de la universidad (Fuera del Programa por bajo rendimiento); rajar/perder/tirarse/volarse una materia = reprobar; el promedio = PGA; estar en prueba = prueba académica; la práctica = práctica profesional; cancelar materias = cancelación de cursos; info = competencias digitales; COSMOS/MiPortalU/CESAF = portales de trámites; Punto U = atención al estudiante. Si un término no es claro, pregunta brevemente qué quiso decir.\n- Si el estudiante está molesto o angustiado, empieza reconociendo su situación con empatía y luego da pasos concretos.\n- Solo puedes consultar datos del estudiante autenticado (id {{ $('Normalizar entrada').item.json.id_estudiante }}). Nunca uses otro ID en las herramientas.\n- Basa las normas en el Reglamento Estudiantil de Pregrado UNAB (2019) y cita el artículo. Si no tienes la información, dilo y remite a: Punto U (agentedeservicios@unab.edu.co, WhatsApp 322 905 7020), CCD (ccdigital@unab.edu.co) o el director de programa.\n- No inventes notas, fechas ni normas. Los datos de estudiantes son sintéticos (simulan Banner/COSMOS).\n- Cuando sea útil, cierra con 1-3 recomendaciones accionables (asesoría académica, Bienestar, rutas de competencias digitales, inglés B2, carga de créditos).\n- Cuando el estudiante pida recomendaciones, consejos o cómo tener éxito, usa proyeccion_y_recomendaciones y organiza la respuesta en los tres ejes del programa: **Investigación**, **Autoaprendizaje** y **Educación de precisión** (basada en sus propios datos).\n- Si el mensaje es continuación del anterior (por ejemplo 'es para un amigo', '¿y cómo lo hago?'), retoma ESE tema y responde la pregunta anterior aplicada al nuevo caso. Nunca respondas algo genérico sin relación.\n- Si pregunta por otra persona (un amigo, un compañero): no des ni busques datos personales de nadie más, pero sí explica el procedimiento general (requisitos, dónde consultar, cómo matricular, a quién escribir) para que esa persona lo haga con su propio usuario.\n- Responde SIEMPRE la parte general de la pregunta (dónde consultar, cómo hacer un trámite, a quién escribir) aunque los datos personales digan que el estudiante ya cumplió; primero el dato personal en una línea y luego el procedimiento.\n- No uses emojis ni emoticones en ninguna respuesta. Usa títulos en negrita y viñetas para ordenar.\n- Memoria persistente: el historial de esta conversación contiene los mensajes anteriores de ESTE estudiante, también de sesiones pasadas (aunque haya cerrado sesión o recargado la app). En cada mensaje anterior, lo que el estudiante escribió aparece después de 'Pregunta del estudiante (tal como la escribió):'. Úsalo para preguntas de seguimiento ('¿y cuál de esos?') y cuando pregunte qué te consultó antes. Nunca digas que no tienes acceso a conversaciones anteriores ni que cada mensaje es independiente.\n- Herramientas MCP disponibles: estado_academico, historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales, plan_de_estudios, buscar_reglamento_y_documentos, calendario_academico, noticias_recientes, simular_notas (qué pasa con el PGA y el estado académico según las notas que espera sacar).\nFecha de hoy: {{ $('Normalizar entrada').item.json.fecha_hoy }}.",
           "maxIterations": 8
         }
       },
-      "id": "3fe89391-73aa-4473-9cb9-c042e5831304",
+      "id": "cb2d5015-a830-494b-b93e-e86d5db7e725",
       "name": "Asistente UNAB (Agente)",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3,
@@ -445,7 +445,7 @@
           "temperature": 0.3
         }
       },
-      "id": "67ed80da-ea13-432b-b97a-fd3e47ea610b",
+      "id": "d67451b8-9f8f-4757-96c9-f7aff94b50c6",
       "name": "Claude (agente)",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.3,
@@ -467,7 +467,7 @@
         "tableName": "n8n_chat_histories",
         "contextWindowLength": 10
       },
-      "id": "a9d7ae14-4ea6-436f-aa4d-663e198502c7",
+      "id": "f0272633-c62c-48dd-a01e-2bfadec97a36",
       "name": "Memoria persistente (Postgres)",
       "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
       "typeVersion": 1.3,
@@ -491,7 +491,7 @@
           "timeout": 60000
         }
       },
-      "id": "86e7f0fc-3a34-481e-b825-cf80befa9fba",
+      "id": "c3e8e8d7-6a60-41db-8561-5de0226ac3f3",
       "name": "Servidor MCP (FastMCP)",
       "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
       "typeVersion": 1.2,
@@ -504,7 +504,7 @@
       "parameters": {
         "jsCode": "\nconst e = $('Normalizar entrada').first().json;\nlet intencion = 'desconocida';\nfor (const n of ['01 Contexto RAG','02 Contexto calendario','03 Contexto historial','04 Contexto noticias']) {\n  try { if ($(n).isExecuted) intencion = $(n).first().json.intencion; } catch (err) {}\n}\nlet txt = String($input.first().json.output ?? $input.first().json.text ?? '').trim();\n// No filtrar datos de otros estudiantes\ntxt = txt.replace(/U\\d{8}/g, m => m.toUpperCase() === e.id_estudiante ? m : '[ID oculto]');\n// No exponer cadenas de conexión ni claves\ntxt = txt.replace(/postgres(ql)?:\\/\\/\\S+/gi, '[oculto]').replace(/sk-ant-[\\w-]+/g, '[oculto]');\nif (!txt) txt = 'No pude generar una respuesta en este momento. Intenta reformular tu pregunta.';\nreturn [{ json: { respuesta: txt.slice(0, 6000), intencion, bloqueado: false } }];\n"
       },
-      "id": "1a931570-0988-46e5-90fd-d02e87c6558a",
+      "id": "80253bbd-f9e4-470c-9b57-143086d6e2d2",
       "name": "Guardrail de salida",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -521,7 +521,7 @@
           "queryReplacement": "={{ [ $('Normalizar entrada').first().json.sessionId, $('Normalizar entrada').first().json.id_estudiante, $json.intencion, $('Normalizar entrada').first().json.mensaje, $json.respuesta, $json.bloqueado, $json.motivo || null ] }}"
         }
       },
-      "id": "bd9878df-c7f6-4ff2-8328-4474e5073afe",
+      "id": "94923973-b49f-47d3-8e84-618491de8e52",
       "name": "Registrar conversación",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -543,7 +543,7 @@
         "responseBody": "={{ JSON.stringify({ respuesta: $('Respuesta final').first().json.respuesta, intencion: $('Respuesta final').first().json.intencion }) }}",
         "options": {}
       },
-      "id": "ea691fca-22fb-4abd-9613-696015603fc7",
+      "id": "bb813929-b9f3-4b19-98d0-f07a88896a1a",
       "name": "Responder",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
@@ -556,7 +556,7 @@
       "parameters": {
         "jsCode": "return [{ json: $input.first().json }];"
       },
-      "id": "4e726b4b-06f8-4999-b003-2eb250e51d81",
+      "id": "d658931b-0f51-459c-b1a3-5e051a857e2f",
       "name": "Respuesta final",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -573,7 +573,7 @@
           "queryReplacement": "={{ $('Normalizar entrada').item.json.sessionId }}"
         }
       },
-      "id": "88dc6dfb-a0dc-467b-8967-4ca26be14a84",
+      "id": "36c125b1-404c-4493-a3c5-5813b1b7b01c",
       "name": "Pregunta anterior (chat_log)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
@@ -593,7 +593,7 @@
       "parameters": {
         "jsCode": "\n// Si el mensaje depende del anterior (\"es para un amigo\", \"¿y cuál de esos?\", \"y cómo lo hago\"),\n// se une con la pregunta previa para que el clasificador y el RAG entiendan el tema.\nconst n = $('Normalizar entrada').first().json;\nconst prev = $input.first().json || {};\nconst m = (n.mensaje || '').trim();\nconst palabras = m.split(/\\s+/).filter(Boolean).length;\nconst marcas = /^(y|e|o|pero|entonces|osea|o sea|tambi[eé]n|igual|ok|vale|bueno|ah|y si|y para|y c[oó]mo|y d[oó]nde|y cu[aá]l|y qu[eé]|es para|para un|para una|lo mismo|eso|esos|esas|ese|esa)\\b|\\b(eso|esos|esas|ese|esa|lo anterior|lo mismo|un amig[oa]|mi amig[oa]|un compa[ñn]er[oa]|otra persona|de ellos|de esos)\\b/i;\nconst seguimiento = !!prev.pregunta && (palabras <= 6 || marcas.test(m));\nconst mensaje_busqueda = seguimiento ? `${prev.pregunta} → ${n.mensaje_busqueda}` : n.mensaje_busqueda;\nreturn [{ json: { ...n, seguimiento, pregunta_anterior: seguimiento ? prev.pregunta : '',\n                  respuesta_anterior: seguimiento ? (prev.respuesta || '') : '', mensaje_busqueda } }];\n"
       },
-      "id": "5be6c26f-11bb-402d-8441-83d26be1a965",
+      "id": "1d04bf2d-e323-4c49-b04f-00eac8239456",
       "name": "Unir seguimiento",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

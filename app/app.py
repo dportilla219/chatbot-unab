@@ -6,6 +6,7 @@ Variables de entorno:
   API_URL        servidor MCP/API para autenticar        (p. ej. http://mcp:9000)
   API_TOKEN      clave compartida (opcional)
 """
+import html
 import os
 import uuid
 
@@ -184,6 +185,10 @@ html, body { overflow-x: hidden !important; }
 #lista-conv input { display:none !important; }
 #lista-conv label span { white-space:pre-line !important; }
 #nueva-conv { max-width:170px; }
+#buscar-conv textarea, #buscar-conv input { border-radius:12px !important; font-size:.88rem !important; }
+#simulador { padding:6px 12px !important; margin:8px 12px !important; width:auto !important; border-color:#FDDDB5 !important; }
+#conv-vacio .vacio { padding:18px 8px; }
+#simulador input[type=range] { accent-color:var(--naranja); }
 #chat-acciones { justify-content:flex-end !important; margin-bottom:-6px !important; }
 #nueva-chat { max-width:96px; min-width:80px !important; border-radius:999px !important; background:#fff !important;
                border:1px solid var(--borde) !important; color:var(--tinta) !important; font-weight:600 !important; }
@@ -297,14 +302,21 @@ def _titulo_conv(c):
     return f"{t}\n{c['ultima']} · {n} pregunta{'s' if n != 1 else ''}"
 
 
-def lista_conversaciones(state):
+def lista_conversaciones(state, q=""):
     if not state:
-        return gr.update(choices=[], value=None)
-    convs = datos_app("conversaciones", state) or []
+        return gr.update(choices=[], value=None), ""
+    q = (q or "").strip()
+    convs = datos_app("conversaciones", state, q=q) or []
     for c in convs:
         c["_sid"] = state["id"]
     actual = state.get("conv") if any(c["id"] == state.get("conv") for c in convs) else None
-    return gr.update(choices=[(_titulo_conv(c), c["id"]) for c in convs], value=actual)
+    if convs:
+        aviso = ""
+    elif q:
+        aviso = f"<div class='vacio'>Ninguna conversación menciona \"{html.escape(q)}\".</div>"
+    else:
+        aviso = "<div class='vacio'>Aún no tienes conversaciones guardadas. Escríbele al asistente desde la pestaña Chat.</div>"
+    return gr.update(choices=[(_titulo_conv(c), c["id"]) for c in convs], value=actual), aviso
 
 
 def abrir_conversacion(conv, state):
@@ -338,8 +350,53 @@ def ver_historial(state):
     return vistas.historial(datos_app("historial", state)) if state else ""
 
 
+MAX_SIM = 9  # cursos en curso que admite el simulador
+
+
 def ver_personal(state):
-    return vistas.personal(datos_app("personal", state)) if state else ""
+    """Pestaña Personal: progreso, plan sugerido, simulador (un deslizador por curso en curso) y detalle."""
+    datos = datos_app("personal", state) if state else None
+    cursos = (datos or {}).get("simulador") or []
+    sliders = [gr.Slider(visible=i < len(cursos), label=(f"{cursos[i]['asignatura']} ({cursos[i]['creditos']} cr.)" if i < len(cursos) else ""),
+                         value=3.5) for i in range(MAX_SIM)]
+    return ([vistas.personal_resumen(datos), vistas.personal(datos) if state else "",
+             gr.Column(visible=bool(cursos)), [c["codigo"] for c in cursos], ""] + sliders)
+
+
+def simular(state, codigos, *notas):
+    if not state or not codigos:
+        return "<div class='vacio'>No tienes cursos en curso para simular.</div>"
+    try:
+        r = requests.post(f"{API_URL}/app/simular", json={"id_estudiante": state["id"],
+                                                          "notas": {c: n for c, n in zip(codigos, notas)}},
+                          headers=HDR, timeout=20).json()
+    except Exception:  # noqa: BLE001
+        r = {}
+    return vistas.simulacion(r.get("datos") if r.get("ok") else None)
+
+
+def ver_avisos(state):
+    return vistas.avisos(datos_app("alertas", state)) if state else ""
+
+
+def calificar(state, historial, dato: gr.LikeData):
+    """Guarda el pulgar arriba o abajo de una respuesta del asistente."""
+    if not state or not historial:
+        return
+    i = dato.index if isinstance(dato.index, int) else dato.index[0]
+    if i >= len(historial) or historial[i].get("role") != "assistant":
+        return
+    pregunta = next((historial[j]["content"] for j in range(i - 1, -1, -1) if historial[j].get("role") == "user"), "")
+    valor = 1 if dato.liked is True else (-1 if dato.liked is False else 0)
+    contenido = historial[i]["content"]
+    if isinstance(contenido, list):
+        contenido = " ".join(str(c.get("text", c)) if isinstance(c, dict) else str(c) for c in contenido)
+    try:
+        requests.post(f"{API_URL}/app/calificar", json={"id_estudiante": state["id"], "session_id": state.get("conv"),
+                                                        "pregunta": pregunta if isinstance(pregunta, str) else str(pregunta),
+                                                        "respuesta": contenido, "valor": valor}, headers=HDR, timeout=10)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def config_servidor():
@@ -376,6 +433,10 @@ def _entrar(r, recordar, password_usada=""):
                   f"Estás en **{est['programa']}**, semestre {est['semestre_actual']}. "
                   "Puedo ayudarte con tu matrícula, avance del plan, proyección de grado, competencias digitales, "
                   "calendario académico, reglamento y noticias. ¿En qué te ayudo?")
+    importantes = [a for a in (datos_app("alertas", state) or []) if a.get("nivel") in ("alta", "personal")]
+    if importantes:
+        saludo += "\n\n**Avisos para ti:** " + " · ".join(a["titulo"] for a in importantes[:3]) + \
+            ". Los detalles están en la pestaña **Eventos**."
     guardar = state["token"] if (recordar and state["token"]) else ""
     debe = bool(r.get("debe_cambiar"))
     return (state, gr.update(visible=False), gr.update(visible=not debe), ficha_html(state),
@@ -556,9 +617,13 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
                 with gr.Row(elem_id="conv-cabecera"):
                     gr.HTML("<h3>Tus conversaciones</h3>", padding=False)
                     btn_nueva_conv = gr.Button("Nueva conversación", size="sm", variant="primary", elem_id="nueva-conv", scale=0)
+                buscar_conv = gr.Textbox(placeholder="Buscar en tus conversaciones (ej. PFU, inglés, matrícula)", show_label=False,
+                                         max_lines=1, container=False, elem_id="buscar-conv")
+                conv_vacio = gr.HTML(padding=False, elem_id="conv-vacio")
                 lista_conv = gr.Radio(choices=[], show_label=False, elem_id="lista-conv", container=False)
             with gr.Tab("Chat", id="chat"):
                 chat = gr.Chatbot(elem_id="chat", show_label=False, height="calc(100vh - 330px)", buttons=["copy"],
+                                  feedback_options=("Like", "Dislike"),
                                   group_consecutive_messages=False, placeholder=PLACEHOLDER,
                                   avatar_images=(None, os.path.join(os.path.dirname(__file__), "icon.png")))
                 gr.HTML("<p id='chips-titulo'>Sugerencias</p>")
@@ -581,9 +646,19 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
                     with gr.Accordion("Eliminar uno de mis eventos", open=False):
                         ev_lista = gr.Dropdown(label="Mis eventos", choices=[])
                         ev_borrar = gr.Button("Eliminar evento", size="sm")
+                html_avisos = gr.HTML(padding=False)
                 html_eventos = gr.HTML(padding=False)
             with gr.Tab("Personal", id="personal") as tab_personal:
                 ficha = gr.HTML("", padding=False, elem_id="ficha-personal")
+                html_resumen = gr.HTML(padding=False)
+                sim_codigos = gr.State([])
+                with gr.Column(visible=False, elem_classes="tarjeta", elem_id="simulador") as panel_sim:
+                    with gr.Accordion("Simulador de notas: ¿qué pasa si...?", open=False):
+                        gr.HTML("<p class='nota' style='text-align:left;margin:0'>Mueve cada barra a la nota que esperas sacar "
+                                "en tus cursos actuales y mira cómo quedarían tu PGA y tu estado académico.</p>")
+                        sim_sliders = [gr.Slider(0, 5, value=3.5, step=0.1, visible=False) for _ in range(MAX_SIM)]
+                        btn_simular = gr.Button("Calcular", variant="primary")
+                        html_sim = gr.HTML(padding=False)
                 html_personal = gr.HTML(padding=False)
                 with gr.Column(visible=False, elem_classes="tarjeta") as seguridad:
                     gr.HTML("<h3 style='margin:0'>Seguridad</h3>")
@@ -619,15 +694,19 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
             responder, [pendiente, chat, state], chat)
     tab_noticias.select(ver_noticias, [state, filtro_tema], html_noticias)
     filtro_tema.change(ver_noticias, [state, filtro_tema], html_noticias)
-    tab_historial.select(lista_conversaciones, state, lista_conv)
+    tab_historial.select(lista_conversaciones, [state, buscar_conv], [lista_conv, conv_vacio])
+    buscar_conv.submit(lista_conversaciones, [state, buscar_conv], [lista_conv, conv_vacio])
+    buscar_conv.change(lambda st, q: lista_conversaciones(st, q) if not q else (gr.update(), gr.update()),
+                       [state, buscar_conv], [lista_conv, conv_vacio])
+    chat.like(calificar, [state, chat], None)
     lista_conv.input(abrir_conversacion, [lista_conv, state], [chat, state, tabs])
     btn_nueva_conv.click(nueva_conversacion, state, [chat, state, tabs])
     btn_nueva_chat.click(nueva_conversacion, state, [chat, state, tabs])
-    tab_eventos.select(ver_eventos, state, [html_eventos, panel_eventos, ev_lista])
+    tab_eventos.select(ver_eventos, state, [html_eventos, panel_eventos, ev_lista]).then(ver_avisos, state, html_avisos)
     ev_guardar.click(guardar_evento, [ev_nombre, ev_fecha, ev_desc, state],
                      [ev_msg, html_eventos, panel_eventos, ev_lista, ev_nombre, ev_fecha, ev_desc])
     ev_borrar.click(eliminar_evento, [ev_lista, state], [ev_msg, html_eventos, panel_eventos, ev_lista])
-    tab_personal.select(ver_personal, state, html_personal).then(
+    tab_personal.select(ver_personal, state, [html_resumen, html_personal, panel_sim, sim_codigos, html_sim] + sim_sliders).then(
         lambda st: gr.Column(visible=bool(st and st.get("token"))), state, seguridad).then(
         sesiones, state, [lista_ses, msg_ses])
     btn_pw.click(lambda a, n, c, st: cambiar_password(a, n, c, st)[:2], [pw_actual, pw_nueva, pw_conf, state], [msg_pw, state]).then(
@@ -635,6 +714,7 @@ with gr.Blocks(title="Asistente Académico UNAB") as demo:
     btn_cerrar_una.click(lambda st, v: sesiones(st, v) if v else (gr.update(), "Selecciona una sesión."),
                          [state, lista_ses], [lista_ses, msg_ses])
     btn_cerrar_otras.click(lambda st: sesiones(st, "otras"), state, [lista_ses, msg_ses])
+    btn_simular.click(simular, [state, sim_codigos] + sim_sliders, html_sim)
     btn_logout.click(logout, state, salidas)
 
 

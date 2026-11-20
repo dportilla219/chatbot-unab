@@ -52,6 +52,41 @@ details.grupo[open] > summary { border-bottom:1px solid var(--borde); }
 .conv .p { font-weight:700; color:var(--tinta); font-size:.88rem; }
 .conv .r { color:#374151; font-size:.84rem; margin-top:6px; border-left:3px solid var(--naranja); padding-left:10px; }
 .conv .r p { margin:4px 0; } .conv .r ul { margin:4px 0 4px 18px; }
+/* Progreso de carrera */
+.progreso { display:flex; gap:16px; align-items:center; }
+.anillo { flex:0 0 96px; height:96px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+          background:conic-gradient(var(--naranja) calc(var(--p) * 1%), #F1F2F4 0); position:relative; }
+.anillo::before { content:""; position:absolute; inset:10px; border-radius:50%; background:#fff; }
+.anillo b { position:relative; font-size:1.25rem; color:var(--tinta); }
+.anillo span { position:absolute; bottom:22px; font-size:.62rem; color:var(--gris); }
+.datos-prog { flex:1; display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; font-size:.8rem; color:var(--gris); }
+.datos-prog b { display:block; color:var(--tinta); font-size:.98rem; }
+.barras { display:flex; flex-direction:column; gap:7px; margin-top:4px; }
+.barra-area { font-size:.76rem; color:#374151; }
+.barra-area .fila { display:flex; justify-content:space-between; margin-bottom:3px; }
+.barra-area .fila span:last-child { color:var(--gris); }
+.pista { height:7px; border-radius:99px; background:#F1F2F4; overflow:hidden; }
+.pista i { display:block; height:100%; border-radius:99px; background:linear-gradient(90deg, var(--naranja), #F26B21); }
+.pista i.lleno { background:#22A45D; }
+.estado-chip { display:inline-block; border-radius:999px; padding:2px 9px; font-size:.72rem; font-weight:700; }
+.estado-NORMAL { background:#E8F7EE; color:#137A3E; } .estado-CONDICIONAL { background:#FFF4E6; color:#B45309; }
+.estado-PRUEBA_ACADEMICA { background:#FDECEC; color:#B42318; } .estado-SIN_NOTAS { background:#F1F2F4; color:var(--gris); }
+/* Simulador */
+.sim-comp { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; }
+.sim-comp .lado { background:#fff; border:1px solid var(--borde); border-radius:14px; padding:10px; text-align:center; }
+.sim-comp .lado.nuevo { border-color:var(--naranja); background:var(--naranja-claro); }
+.sim-comp .k { font-size:.7rem; color:var(--gris); text-transform:uppercase; letter-spacing:.4px; }
+.sim-comp .v { font-size:1.4rem; font-weight:800; color:var(--tinta); margin:2px 0; }
+.sim-comp .flecha { color:var(--gris); font-size:1.2rem; }
+.aviso-sim { font-size:.83rem; color:#374151; border-left:3px solid var(--naranja); padding:2px 0 2px 10px; margin-top:6px; }
+.meta-sim { font-size:.8rem; color:#374151; background:#FAFAFB; border-radius:12px; padding:10px 12px; }
+/* Avisos */
+.aviso { display:flex; gap:10px; align-items:flex-start; }
+.aviso .punto { flex:0 0 10px; height:10px; border-radius:50%; margin-top:5px; background:#9CA3AF; }
+.aviso.alta { border-left:4px solid #D92D20; } .aviso.alta .punto { background:#D92D20; }
+.aviso.media { border-left:4px solid var(--naranja); } .aviso.media .punto { background:var(--naranja); }
+.aviso.personal { border-left:4px solid var(--morado); } .aviso.personal .punto { background:var(--morado); }
+.aviso.info { border-left:4px solid #CBD5E1; }
 """
 
 _MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
@@ -197,3 +232,96 @@ def personal(datos):
                    f"<span class='cnt'>{len(g['asignaturas'])} materias · {total} créditos</span></summary>"
                    f"<table class='tabla'><tr><th>Asignatura</th><th>Créd.</th><th>Prerrequisitos</th></tr>{filas}</table></details>")
     return "".join(out) + "</div>"
+
+
+ESTADOS = {"NORMAL": "Normal", "CONDICIONAL": "Condicional", "PRUEBA_ACADEMICA": "Prueba académica", "SIN_NOTAS": "Sin notas aún"}
+
+
+def _chip_estado(e):
+    return f"<span class='estado-chip estado-{escape(e or 'SIN_NOTAS')}'>{escape(ESTADOS.get(e, e or ''))}</span>"
+
+
+def personal_resumen(datos):
+    """Progreso de carrera y plan sugerido para el próximo periodo (parte superior de la pestaña Personal)."""
+    if not datos or not datos.get("progreso"):
+        return ""
+    p = datos["progreso"]
+    pct = float(p.get("porcentaje_avance") or 0)
+    sem = p.get("semestres_restantes")
+    out = ["<div class='vista'><div class='item'><div class='progreso'>",
+           f"<div class='anillo' style='--p:{pct}'><b>{pct:.0f}%</b><span>de la carrera</span></div><div class='datos-prog'>",
+           f"<div><b>{p.get('creditos_aprobados') or 0} / {p.get('creditos_totales') or '-'}</b>créditos aprobados</div>",
+           f"<div><b>{p.get('creditos_en_curso') or 0}</b>créditos en curso</div>",
+           f"<div><b>{p.get('pga') if p.get('pga') is not None else '-'}</b>PGA</div>",
+           f"<div><b>{_chip_estado(p.get('estado_academico'))}</b>estado académico</div>",
+           f"<div style='grid-column:1/3'><b>{'-' if sem is None else int(float(sem))} semestre{'' if sem is not None and int(float(sem)) == 1 else 's'}</b>"
+           "estimados para terminar (según tu carga permitida)</div></div></div></div>"]
+    areas = p.get("areas") or []
+    if areas:
+        filas = []
+        for a in areas:
+            tot, ap = int(a.get("total") or 0), int(a.get("aprobados") or 0)
+            w = round(100 * ap / tot) if tot else 0
+            filas.append(f"<div class='barra-area'><div class='fila'><span>{escape(a['area'] or 'Otras')}</span><span>{ap}/{tot} créditos</span></div>"
+                         f"<div class='pista'><i class='{'lleno' if w >= 100 else ''}' style='width:{w}%'></i></div></div>")
+        out.append("<details class='grupo'><summary>Avance por área<span class='cnt'>" + str(len(areas)) +
+                   " áreas</span></summary><div class='barras' style='padding:12px 14px'>" + "".join(filas) + "</div></details>")
+    prop = datos.get("propuesta")
+    if prop and prop.get("cursos"):
+        filas = "".join(f"<tr><td>{escape(c['asignatura'])}<div class='meta'>{escape(c.get('motivo') or '')}</div></td>"
+                        f"<td class='n'>{c['creditos']}</td></tr>" for c in prop["cursos"])
+        nota = escape(prop.get("supuesto") or "")
+        out.append(f"<details class='grupo'><summary>Plan sugerido para el próximo periodo<span class='cnt'>{prop.get('creditos')} créditos</span></summary>"
+                   f"<table class='tabla'><tr><th>Asignatura</th><th>Créd.</th></tr>{filas}</table>"
+                   f"<div class='meta' style='padding:8px 12px 12px'>Límite aplicado: {escape(prop.get('limite_aplicado') or '')}. {nota} "
+                   "Respeta prerrequisitos y prioriza los cursos reprobados.</div></details>")
+    return "".join(out) + "</div>"
+
+
+def simulacion(r):
+    """Resultado del simulador de notas."""
+    if not r:
+        return "<div class='vacio'>No se pudo calcular la simulación.</div>"
+    a, n = r["actual"], r["simulado"]
+    out = ["<div class='vista'><div class='sim-comp'>",
+           f"<div class='lado'><div class='k'>Ahora</div><div class='v'>{a.get('pga') if a.get('pga') is not None else '-'}</div>"
+           f"{_chip_estado(a.get('estado'))}</div><div class='flecha'>&rarr;</div>",
+           f"<div class='lado nuevo'><div class='k'>Con esas notas</div><div class='v'>{n.get('pga') if n.get('pga') is not None else '-'}</div>"
+           f"{_chip_estado(n.get('estado'))}</div></div>"]
+    datos = []
+    if n.get("ppa_periodo") is not None:
+        datos.append(f"Promedio del periodo (PPA): <b>{n['ppa_periodo']}</b>")
+    datos.append(f"Créditos aprobados: <b>{a.get('creditos_aprobados')} &rarr; {n.get('creditos_aprobados')}</b> ({n.get('porcentaje_avance')} % de la carrera)")
+    if n.get("carga_proximo_periodo"):
+        datos.append(f"Carga permitida el próximo periodo: <b>{escape(n['carga_proximo_periodo'])}</b>")
+    mn, mp = r.get("nota_minima_para_normal"), r.get("nota_minima_para_evitar_prueba")
+    if mn is not None and mn <= 0:
+        datos.append("Conservas el estado Normal con cualquier nota, pero cada curso necesita 3.0 para aprobarse.")
+    elif mn is not None and mn < 3.0:
+        datos.append(f"Tu PGA pasaría de 3.20 desde un promedio de <b>{mn}</b>, pero cada curso necesita <b>3.0</b> para "
+                     "aprobarse: apunta a 3.0 o más en todos.")
+    elif mn is not None:
+        datos.append(f"Para quedar en estado Normal necesitas un promedio de al menos <b>{mn}</b> en tus cursos actuales.")
+    else:
+        datos.append("Este periodo no alcanzas el estado Normal ni con 5.0 en todo; enfócate en no bajar más y en el acompañamiento.")
+    if mp is not None and mp >= 3.0 and mp != mn:
+        datos.append(f"Para no quedar en prueba académica necesitas al menos <b>{mp}</b> de promedio.")
+    out.append("<div class='meta-sim'>" + "<br>".join(datos) + "</div>")
+    out += [f"<div class='aviso-sim'>{escape(t)}</div>" for t in r.get("avisos") or []]
+    out.append(f"<div style='padding:0 4px;color:var(--gris);font-size:.74rem'>{escape(r.get('nota') or '')}</div>")
+    return "".join(out) + "</div>"
+
+
+def avisos(lista):
+    """Avisos para el estudiante (parte superior de la pestaña Eventos)."""
+    if not lista:
+        return ""
+    def tarjeta(a):
+        return (f"<div class='item aviso {escape(a['nivel'])}'><div class='punto'></div><div>"
+                f"<div class='titulo'>{escape(a['titulo'])}</div><div class='texto' style='margin-top:3px'>{escape(a['detalle'])}</div></div></div>")
+    visibles, resto = lista[:3], lista[3:]
+    out = ["<div class='vista' style='margin-bottom:12px'><h3>Avisos para ti</h3>"] + [tarjeta(a) for a in visibles]
+    if resto:
+        out.append(f"<details class='grupo'><summary>Ver {len(resto)} aviso{'s' if len(resto) != 1 else ''} más</summary>"
+                   "<div class='vista' style='padding:10px'>" + "".join(tarjeta(a) for a in resto) + "</div></details>")
+    return "".join(out) + "<h3>Próximos eventos</h3></div>"

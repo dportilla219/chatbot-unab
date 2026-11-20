@@ -224,7 +224,7 @@ FROM academico.v_resumen_estudiante r WHERE r.id_estudiante = $1;""".strip(),
 code(w, "03 Contexto historial", r"""
 const d = $input.first().json;
 return [{ json: { intencion: 'historial_personal', contexto: JSON.stringify(d, null, 1).slice(0, 9000),
-  instruccion: 'Responde de forma personalizada con los datos del estudiante. Para cursos realizados, notas por periodo, asignaturas pendientes o propuesta del próximo semestre usa las herramientas MCP (historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales). Da recomendaciones concretas para el éxito académico.' } }];
+  instruccion: 'Responde de forma personalizada con los datos del estudiante. Para cursos realizados, notas por periodo, asignaturas pendientes o propuesta del próximo semestre usa las herramientas MCP (historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales). Si pregunta qué pasaría con ciertas notas o qué nota necesita para salir de condicional o no quedar en prueba, usa simular_notas. Da recomendaciones concretas para el éxito académico.' } }];
 """, [960, 140])
 
 # ---- Workflow 04: noticias -> BD alimentada por scraper
@@ -260,7 +260,7 @@ Reglas:
 - Responde SIEMPRE la parte general de la pregunta (dónde consultar, cómo hacer un trámite, a quién escribir) aunque los datos personales digan que el estudiante ya cumplió; primero el dato personal en una línea y luego el procedimiento.
 - No uses emojis ni emoticones en ninguna respuesta. Usa títulos en negrita y viñetas para ordenar.
 - Memoria persistente: el historial de esta conversación contiene los mensajes anteriores de ESTE estudiante, también de sesiones pasadas (aunque haya cerrado sesión o recargado la app). En cada mensaje anterior, lo que el estudiante escribió aparece después de 'Pregunta del estudiante (tal como la escribió):'. Úsalo para preguntas de seguimiento ('¿y cuál de esos?') y cuando pregunte qué te consultó antes. Nunca digas que no tienes acceso a conversaciones anteriores ni que cada mensaje es independiente.
-- Herramientas MCP disponibles: estado_academico, historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales, plan_de_estudios, buscar_reglamento_y_documentos, calendario_academico, noticias_recientes.
+- Herramientas MCP disponibles: estado_academico, historial_cursos, asignaturas_pendientes, proyeccion_y_recomendaciones, competencias_digitales, plan_de_estudios, buscar_reglamento_y_documentos, calendario_academico, noticias_recientes, simular_notas (qué pasa con el PGA y el estado académico según las notas que espera sacar).
 Fecha de hoy: {{ $('Normalizar entrada').item.json.fecha_hoy }}."""
 
 w.add("Asistente UNAB (Agente)", "@n8n/n8n-nodes-langchain.agent", 3,

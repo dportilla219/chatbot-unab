@@ -55,7 +55,7 @@ flowchart LR
             AG --> G2["Guardrail de salida"] --> LOG["chat_log"]
         end
         APP -->|"/auth · /app/datos · /historial"| MCP
-        AG -->|"MCP HTTP streamable :9000"| MCP["Servidor MCP · FastMCP (Python)<br/>10 herramientas + rutas HTTP"]
+        AG -->|"MCP HTTP streamable :9000"| MCP["Servidor MCP · FastMCP (Python)<br/>11 herramientas + rutas HTTP"]
         R1 -->|"/rag/search"| MCP
         MCP --> EMB["Embeddings MiniLM 384 d<br/>(local)"]
         ING["n8n · workflow 01<br/>ingesta RAG"] -->|"/embed"| MCP
@@ -106,7 +106,7 @@ URLs del despliegue: `https://app.3-222-163-239.sslip.io` (app) · `https://n8n.
 | Implementación de RAG (15 %) | Pipeline, documentos, justificación de chunks, overlap y embeddings, recuperación demostrada | [Sección 5](#5-rag-institucional): diagrama del pipeline, documentos, tabla de parámetros justificados y consultas con sus fragmentos recuperados |
 | Base de datos PostgreSQL (10 %) | Scripts de creación e inserción, modelo coherente, acceso al servidor con tablas y datos | [Sección 4](#4-base-de-datos-simulación-bannercosmos): modelo ER, scripts `db/01`–`08`, consultas de ejemplo y capturas de Supabase |
 | Workflows de n8n (15 %) | Agente, LLM, memoria, herramientas, MCP y guardrails; ejecución exitosa | [Sección 6](#6-workflows-de-n8n) y [8](#8-guardrails-y-memoria): workflows importables y capturas de ejecuciones reales |
-| Servidor MCP y webhook (10 %) | Herramientas/endpoints documentados; webhook probado con evidencia | [Sección 7](#7-servidor-mcp-fastmcp): 10 herramientas y todas las rutas, `curl`, colección de Postman, `deploy/probar_webhook.sh` y su salida |
+| Servidor MCP y webhook (10 %) | Herramientas/endpoints documentados; webhook probado con evidencia | [Sección 7](#7-servidor-mcp-fastmcp): 11 herramientas y todas las rutas, `curl`, colección de Postman, `deploy/probar_webhook.sh` y su salida |
 | Scraper de noticias (10 %) | Noticias del día (educación, tecnología, ingeniería de sistemas) con fuente y fecha, integradas | [Sección 9](#9-scraper-de-noticias): UNAB + Google News + ENTER.CO, con fuente, fecha y tema; en el agente y en la pestaña Noticias |
 | Aplicación Android (15 %) | Funciona en dispositivo con matrícula, estado, proyección y recomendaciones; conectada al webhook | [Sección 10](#10-aplicación-android-gradio): APK, capturas en un celular real y [video](docs/video_demo_chatbot_unab.mp4) |
 | Documentación técnica (10 %) | README completo con imágenes y manual de usuario | Este README y el [manual de usuario](#11-manual-de-usuario) |
@@ -252,6 +252,7 @@ erDiagram
 | `db/06_perfil_y_acceso.sql` | Profesores, certificados, contraseñas (bcrypt) y sesiones |
 | `db/07_eventos_personales.sql` | Eventos personales de cada estudiante |
 | `db/08_noticias_fuentes.sql` | Fuente y tema de las noticias |
+| `db/09_calificaciones.sql` | Calificación de respuestas (útil / no útil) y vista `v_satisfaccion` por ruta |
 
 **Consultas de ejemplo** (SQL Editor de Supabase):
 
@@ -376,17 +377,20 @@ Ejecuciones reales en el servidor de AWS (n8n 2.47.7 en EC2). Cada pregunta desd
 | `buscar_reglamento_y_documentos` | Búsqueda RAG híbrida |
 | `calendario_academico` | Fechas (respaldo en BD) |
 | `noticias_recientes` | Noticias por etiqueta o palabra clave |
+| `simular_notas` | Simulador "¿qué pasa si...?": PGA, estado académico (Art. 24) y carga permitida según las notas esperadas; nota mínima para quedar en Normal o evitar la prueba |
 
 **Rutas HTTP del servidor** (todas consultan la base de datos; las que modifican datos exigen `X-API-Key`):
 
 | Método y ruta | Qué hace | Clave |
 |---|---|---|
-| `POST /mcp` | Protocolo MCP (HTTP streamable): las 10 herramientas de la tabla anterior | — |
+| `POST /mcp` | Protocolo MCP (HTTP streamable): las 11 herramientas de la tabla anterior | — |
 | `GET /health` | Estado y conteo de estudiantes, fragmentos y noticias | — |
 | `GET /evidencias` | Tablas con datos, herramientas MCP, llamada de ejemplo y recuperación RAG (sin LLM, caché 10 min) | — |
 | `POST /rag/search` | Búsqueda híbrida en los documentos | — |
 | `GET /auth/config` · `POST /auth` · `/auth/token` · `/auth/password` · `/auth/sesiones` | Inicio de sesión, contraseña, sesiones guardadas, perfil de prueba | Sí |
-| `POST /app/datos` | Datos de las pestañas: noticias, eventos, conversaciones, personal | Sí |
+| `POST /app/datos` | Datos de las pestañas: noticias, eventos, avisos, conversaciones (con búsqueda), personal (progreso y plan sugerido) | Sí |
+| `POST /app/simular` | Simulador de notas de la pestaña Personal | Sí |
+| `POST /app/calificar` | Guarda el pulgar arriba o abajo de una respuesta | Sí |
 | `POST /app/eventos` | Crear o eliminar eventos personales | Sí |
 | `POST /historial` | Últimos intercambios del estudiante | Sí |
 | `POST /embed` | Embeddings para el workflow de ingesta | Sí |
@@ -468,6 +472,11 @@ Cada noticia se guarda con **título, fecha, fuente, tema** (`Educación`, `Tecn
 - Login con **nombre completo + ID (U00XXXXXX) + carrera**, validado contra la base de datos.
 - **Pestañas** (barra inferior, con el chat en el centro): *Noticias* (scraper), *Historial* (conversaciones anteriores por día), **Chat**, *Eventos* (próximas fechas del calendario académico) y *Personal* (cursos de toda la carrera con nota, estado y profesor; certificados de competencias digitales, inglés y externos; materias que faltan agrupadas por semestre). Los datos salen de la ruta `POST /app/datos` del servidor MCP.
 - **Eventos personales** (migración 07, `bash deploy/migrar_07.sh`): en la pestaña Eventos cada estudiante agrega sus propios eventos (nombre, fecha y descripción). Solo los ve su dueño y aparecen en morado junto al calendario de la UNAB (en naranja). También se pueden eliminar.
+- **Avisos para ti**: arriba de la pestaña Eventos aparecen los avisos calculados con los datos del estudiante: estado condicional o prueba académica, PGA cerca del límite, inasistencia alta en cursos actuales (Art. 46), fechas del calendario de los próximos 14 días, sus eventos de los próximos 3 días e inglés o competencias digitales pendientes. Los más urgentes también se mencionan en el saludo del chat.
+- **Progreso de carrera y plan sugerido**: la pestaña Personal empieza con un anillo de avance (créditos aprobados sobre el total), PGA, estado, semestres estimados para terminar, avance por área y el plan sugerido para el próximo periodo (respeta prerrequisitos y el límite de carga del estado académico, y asume que aprueba los cursos que está viendo).
+- **Simulador de notas**: en Personal, una barra por cada curso actual. Al tocar *Calcular* muestra el PGA y el estado académico que tendría con esas notas, la carga permitida del siguiente periodo y la nota mínima para quedar en estado Normal. El agente usa la misma lógica con la herramienta MCP `simular_notas` ("¿qué nota necesito para salir de condicional?").
+- **Buscar en el historial**: en Historial, un buscador filtra las conversaciones por palabras de la pregunta o la respuesta, sin importar tildes.
+- **Calificar respuestas** (migración 09, `bash deploy/migrar_09.sh`): cada respuesta del chat tiene pulgar arriba y abajo. Las calificaciones se guardan con la ruta que usó el asistente y `/evidencias` muestra el porcentaje de respuestas útiles por ruta.
 - **Perfil de prueba**: el botón *Entrar con perfil de prueba* entra como Valentina Rojas Méndez con todas las funciones. Se desactiva con `DEMO_HABILITADO=0` en el `.env`.
 - **Contraseña y sesiones guardadas** (se activan con la migración 06, `bash deploy/migrar_06.sh`): la contraseña inicial es el mismo ID y se pide cambiarla en el primer ingreso. Se guarda cifrada con bcrypt (`pgcrypto`). Al entrar, el dispositivo recuerda la sesión con un token aleatorio (en la base solo se guarda su hash SHA-256). En *Personal → Seguridad* se cambia la contraseña y se ven y cierran las sesiones abiertas en otros dispositivos. Sin la migración, la app funciona igual que antes (sin contraseña).
 
@@ -511,6 +520,11 @@ Cada noticia se guarda con **título, fecha, fuente, tema** (`Educación`, `Tecn
 | 7b. Certificados | Certificados de competencias digitales, inglés y cursos externos, con entidad y fecha. | ![](docs/capturas/manual_07b_certificados.jpg) |
 | 8. Materias que faltan | Materias pendientes por semestre, con las que ya puede inscribir y las que requieren prerrequisitos. | ![](docs/capturas/manual_08_materias.jpg) |
 | 9. Seguridad | Cambie su contraseña, vea los dispositivos con la sesión abierta y ciérrelos. **Cerrar sesión** sale en este dispositivo. | ![](docs/capturas/manual_09_seguridad.jpg) |
+| 10. Avisos | Al entrar, el chat le recuerda lo urgente. En **Eventos** verá *Avisos para ti*: estado académico, fallas, fechas cercanas y sus eventos de los próximos días. | ![](docs/capturas/app_avisos.jpg) |
+| 11. Progreso y plan | Arriba de **Personal**: porcentaje de la carrera, PGA, estado, semestres que faltan, avance por área y el plan sugerido para el próximo periodo. | ![](docs/capturas/app_progreso_carrera.jpg) |
+| 12. Simulador de notas | En **Personal**, abra *Simulador de notas*, mueva cada barra a la nota que espera y toque **Calcular**. Verá cómo quedarían su PGA y su estado, y qué nota necesita para quedar en Normal. | ![](docs/capturas/app_simulador_notas.jpg) |
+| 13. Buscar conversaciones | En **Historial**, escriba una palabra (por ejemplo "PFU" o "inglés") y presione Enter. | ![](docs/capturas/app_busqueda_historial.jpg) |
+| 14. Calificar respuestas | Toque el pulgar arriba o abajo debajo de cada respuesta. Ayuda a medir y mejorar el asistente. | ![](docs/capturas/app_saludo_avisos.jpg) |
 
 **Preguntas que puede hacer:**
 - *Matrícula y estado:* "¿Cuál es mi estado de matrícula y avance?", "¿Cuánto debo de matrícula?"
@@ -519,8 +533,9 @@ Cada noticia se guarda con **título, fecha, fuente, tema** (`Educación`, `Tecn
 - *Reglamento:* "¿Qué pasa si quedo en prueba académica?", "¿Cuántas fallas puedo tener?"
 - *Competencias digitales:* "¿Qué es la insignia?", "¿Qué cursos de competencias digitales he tomado?"
 - *Calendario y noticias:* "¿Cuándo son las inscripciones?", "¿Hay noticias de tecnología hoy?"
+- *Simulación:* "Si saco 4 en todo este semestre, ¿cómo quedo?", "¿Qué nota necesito para salir de condicional?"
 
-> Las capturas de los pasos 2 y 4 a 9 son de un celular Android real (19 de noviembre de 2026); las de los pasos 1 y 3 son de la app en un navegador con tamaño de celular.
+> Las capturas de los pasos 2 y 4 a 9 son de un celular Android real (19 de noviembre de 2026); las de los pasos 1, 3 y 10 a 14 son de la app en un navegador con tamaño de celular.
 
 ## 12. Pertinencia pedagógica
 
@@ -614,6 +629,12 @@ Pruebas contra el despliegue real con 10 estudiantes sintéticos distintos (prim
 | Santiago | Dame una receta de arepas | Fuera de alcance | Redirige a temas académicos |
 
 Tiempo de respuesta: 0,2 s (bloqueos) a 6-24 s (agente con herramientas). Antes del despliegue también se validaron los workflows con `tests/mock_anthropic.py`.
+
+**Pruebas automáticas** (`tests/test_herramientas.py`, con `pytest`): reglas del estado académico del Art. 24 (incluido el caso límite de PGA 3.20 y el segundo periodo consecutivo en condicional), el simulador de notas (una nota aprobada reemplaza la reprobada en el PGA, nota mínima) y una prueba de humo que recorre todas las herramientas MCP y las secciones de la app con 20 estudiantes al azar. Esta prueba de humo detectó y permitió corregir un error en `proyeccion_y_recomendaciones` que había entrado con las pestañas de la app.
+
+```bash
+cd mcp_server && DATABASE_URL=postgresql://... python -m pytest ../tests/test_herramientas.py -q
+```
 
 Diagnóstico durante el despliegue (script `deploy/ultimo_error.py`):
 

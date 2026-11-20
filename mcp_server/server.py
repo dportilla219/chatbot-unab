@@ -120,12 +120,14 @@ def proyeccion_y_recomendaciones(id_estudiante: str) -> dict:
     recomendaciones para el éxito académico en tres ejes: investigación, autoaprendizaje y educación de precisión."""
     sid = _check_id(id_estudiante)
     proy = db.fetch_one("SELECT * FROM v_proyeccion_grado WHERE id_estudiante=%s", (sid,))
-    pend = db.fetch_all("""SELECT * FROM v_asignaturas_pendientes WHERE id_estudiante=%s
-                           ORDER BY semestre_sugerido, asignatura""", (sid,))
+    pend = _pendientes(sid)
     estado = proy["estado_academico"]
     max_cred = {"CONDICIONAL": 9, "PRUEBA_ACADEMICA": 99}.get(estado, 18)
     max_cursos = {"CONDICIONAL": 3, "PRUEBA_ACADEMICA": 2}.get(estado, 9)
-    cand = pend["habilitadas"]
+    # El próximo periodo empieza cuando termine el actual: se asume que aprueba los cursos que está viendo.
+    viendo = {c["asignatura"] for c in pend["en_curso"]}
+    cand = pend["habilitadas"] + [c for c in pend["bloqueadas_por_prerrequisito"]
+                                  if not {x.strip() for x in c["prerrequisitos_faltantes"].split(",")} - viendo]
     if estado == "PRUEBA_ACADEMICA":
         cand = [c for c in cand if c["reprobada_antes"]]
     cand = sorted(cand, key=lambda c: (not c["reprobada_antes"], c["semestre_sugerido"]))
@@ -157,7 +159,8 @@ def proyeccion_y_recomendaciones(id_estudiante: str) -> dict:
     if proy["pga"] and proy["pga"] >= 4.25:
         recs.append("Vas en camino a una distinción de grado (Cum Laude desde PGA 4.25, sin cursos reprobados ni repetidos, Art. 89).")
     return {"proyeccion": proy, "propuesta_proximo_periodo": {"creditos": cred, "cursos": plan,
-            "limite_aplicado": f"{max_cursos} cursos / {max_cred if max_cred < 99 else 'sin tope'} créditos por estado {estado}"},
+            "limite_aplicado": f"{max_cursos} cursos / {max_cred if max_cred < 99 else 'sin tope'} créditos por estado {estado}",
+            "supuesto": "Se asume que apruebas los cursos que estás viendo este periodo." if pend["en_curso"] else ""},
             "recomendaciones_personalizadas": recs, "areas_con_dificultad": dificiles,
             "recomendaciones_exito": _recomendaciones_exito(sid, proy, dificiles, plan)}
 
@@ -202,6 +205,143 @@ def _recomendaciones_exito(sid: str, proy: dict, dificiles: list, plan: list) ->
     if 0 < falta:
         prec.append(f"Te faltan {falta:.2f} puntos de PGA para el mínimo de grado (3.20, Art. 67).")
     return {"investigacion": inv, "autoaprendizaje": auto, "educacion_de_precision": prec, "promedio_por_area": areas}
+
+
+# ----------------------------------------------------------------- simulador de notas
+_CARGA = {"NORMAL": "hasta 18 créditos", "CONDICIONAL": "máximo 3 cursos y acompañamiento de Bienestar (Art. 84)",
+          "PRUEBA_ACADEMICA": "solo 2 cursos reprobados dentro del Programa de Recuperación Académica (Art. 85-86)"}
+
+
+def _estado_por_pga(pga: float | None, estado_actual: str) -> str:
+    """Art. 24: Normal PGA > 3.20; Condicional 3.00-3.20; Prueba si es el segundo periodo consecutivo
+    en 3.00-3.20 o si el PGA es inferior a 3.00."""
+    if pga is None:
+        return estado_actual or "NORMAL"
+    if pga > 3.20:
+        return "NORMAL"
+    if pga >= 3.00:
+        return "PRUEBA_ACADEMICA" if estado_actual in ("CONDICIONAL", "PRUEBA_ACADEMICA") else "CONDICIONAL"
+    return "PRUEBA_ACADEMICA"
+
+
+def _base_simulacion(sid: str) -> dict:
+    mejores = db.fetch_all("""SELECT cod_asignatura AS codigo, asignatura, creditos, nota_final AS nota, estado
+                              FROM v_mejor_nota WHERE id_estudiante=%s""", (sid,))
+    en_curso = db.fetch_all("""SELECT h.cod_asignatura AS codigo, a.nombre AS asignatura, a.creditos,
+                                      EXISTS (SELECT 1 FROM historial_academico r WHERE r.id_estudiante=h.id_estudiante
+                                              AND r.cod_asignatura=h.cod_asignatura AND r.estado='REPROBADA') AS repite
+                               FROM historial_academico h JOIN asignatura a USING (cod_asignatura)
+                               WHERE h.id_estudiante=%s AND h.estado='EN_CURSO'
+                               ORDER BY a.semestre_sugerido, a.nombre""", (sid,))
+    res = db.fetch_one("""SELECT pga, estado_academico, creditos_aprobados, creditos_totales, porcentaje_avance
+                          FROM v_resumen_estudiante WHERE id_estudiante=%s""", (sid,))
+    return {"mejores": mejores, "en_curso": en_curso, "resumen": res}
+
+
+def _calcular(base: dict, notas: dict) -> dict:
+    """Recalcula PGA y créditos como v_resumen_estudiante: cuenta la mejor nota de cada asignatura
+    (si apruebas un curso que habías reprobado, la nota reprobada deja de contar)."""
+    rango = lambda r: (r["estado"] in ("APROBADA", "HOMOLOGADA"), float(r["nota"] or 0))
+    mejor = {r["codigo"]: r for r in base["mejores"]}
+    for c in base["en_curso"]:
+        if c["codigo"] not in notas:
+            continue
+        n = float(notas[c["codigo"]])
+        nuevo = {"codigo": c["codigo"], "creditos": c["creditos"], "nota": n,
+                 "estado": "APROBADA" if n >= 3.0 else "REPROBADA"}
+        if c["codigo"] not in mejor or rango(nuevo) > rango(mejor[c["codigo"]]):
+            mejor[c["codigo"]] = nuevo
+    cursadas = [r for r in mejor.values() if r["estado"] != "HOMOLOGADA" and (r["creditos"] or 0) > 0 and r["nota"] is not None]
+    cred = sum(r["creditos"] for r in cursadas)
+    pga = round(sum(float(r["nota"]) * r["creditos"] for r in cursadas) / cred, 2) if cred else None
+    aprob = sum(r["creditos"] for r in mejor.values() if r["estado"] in ("APROBADA", "HOMOLOGADA"))
+    return {"pga": pga, "creditos_aprobados": aprob}
+
+
+def _nota_minima(base: dict, cods: list, objetivo) -> float | None:
+    """Menor nota igual en todos los cursos actuales con la que se cumple `objetivo(resultado)`."""
+    if not cods:
+        return None
+    if not objetivo(_calcular(base, {c: 5.0 for c in cods})):
+        return None
+    lo, hi = 0.0, 5.0
+    for _ in range(30):
+        mid = (lo + hi) / 2
+        if objetivo(_calcular(base, {c: mid for c in cods})):
+            hi = mid
+        else:
+            lo = mid
+    return round(min(5.0, (int(hi * 10 + 0.999)) / 10), 1)
+
+
+def _simular(sid: str, notas: dict | None = None, nota_uniforme: float | None = None) -> dict:
+    base = _base_simulacion(sid)
+    res = base["resumen"] or {}
+    actual = res.get("estado_academico") or "NORMAL"
+    cods = [c["codigo"] for c in base["en_curso"]]
+    por_nombre = {_norm(c["asignatura"]): c["codigo"] for c in base["en_curso"]}
+    elegidas: dict = {}
+    for k, v in (notas or {}).items():
+        if v is None or v == "":
+            continue
+        cod = k if k in cods else por_nombre.get(_norm(str(k))) or next(
+            (c for n, c in por_nombre.items() if _norm(str(k)) and _norm(str(k)) in n), None)
+        if cod:
+            elegidas[cod] = max(0.0, min(5.0, round(float(v), 1)))
+    if nota_uniforme is not None:
+        for c in cods:
+            elegidas.setdefault(c, max(0.0, min(5.0, round(float(nota_uniforme), 1))))
+    calc = _calcular(base, elegidas)
+    nuevo = _estado_por_pga(calc["pga"], actual) if elegidas else actual
+    cursos = []
+    for c in base["en_curso"]:
+        n = elegidas.get(c["codigo"])
+        cursos.append({"codigo": c["codigo"], "asignatura": c["asignatura"], "creditos": c["creditos"], "nota": n,
+                       "resultado": None if n is None else ("aprobada" if n >= 3.0 else "reprobada"), "repite": c["repite"]})
+    con_nota = [c for c in cursos if c["nota"] is not None]
+    cred_sim = sum(c["creditos"] for c in con_nota)
+    ppa = round(sum(c["nota"] * c["creditos"] for c in con_nota) / cred_sim, 2) if cred_sim else None
+    tot = res.get("creditos_totales") or 0
+    min_normal = _nota_minima(base, cods, lambda r: _estado_por_pga(r["pga"], actual) == "NORMAL")
+    min_no_prueba = _nota_minima(base, cods, lambda r: _estado_por_pga(r["pga"], actual) != "PRUEBA_ACADEMICA")
+    avisos = [] if elegidas else ["Escribe la nota que esperas en al menos uno de tus cursos actuales."]
+    reprob = [c["asignatura"] for c in con_nota if c["resultado"] == "reprobada"]
+    if reprob:
+        uno = len(reprob) == 1
+        avisos.append("Con esas notas reprobarías " + ", ".join(reprob) + ("; tendrías que repetirla y esa nota sigue contando en tu PGA hasta que la apruebes."
+                      if uno else "; tendrías que repetirlas y esas notas siguen contando en tu PGA hasta que las apruebes."))
+    if not elegidas:
+        pass
+    elif nuevo == "PRUEBA_ACADEMICA":
+        avisos.append("Quedarías en prueba académica: debes solicitar el ingreso al Programa de Recuperación Académica (Art. 86). "
+                      "Si no lo apruebas, pierdes el derecho de renovar matrícula (Art. 12 y 87).")
+    elif nuevo == "CONDICIONAL":
+        avisos.append("Quedarías en estado condicional: el próximo periodo podrás matricular máximo 3 cursos (Art. 84). "
+                      "Si repites ese rango otro periodo, pasarías a prueba académica (Art. 24).")
+    if elegidas and calc["pga"] is not None and calc["pga"] < 3.20:
+        avisos.append("Para graduarte necesitas un PGA mínimo de 3.20 (Art. 67).")
+    if calc["pga"] is not None and calc["pga"] >= 4.25 and not res.get("cursos_reprobados_pendientes"):
+        avisos.append("Con un PGA desde 4.25, sin cursos reprobados ni repetidos, podrías aspirar a una distinción de grado (Art. 89).")
+    return {
+        "actual": {"pga": res.get("pga"), "estado": actual, "creditos_aprobados": res.get("creditos_aprobados"),
+                   "porcentaje_avance": res.get("porcentaje_avance")},
+        "simulado": {"ppa_periodo": ppa, "pga": calc["pga"], "estado": nuevo, "creditos_aprobados": calc["creditos_aprobados"],
+                     "porcentaje_avance": round(100 * calc["creditos_aprobados"] / tot, 1) if tot else None,
+                     "carga_proximo_periodo": _CARGA.get(nuevo, "")},
+        "cursos": cursos,
+        "nota_minima_para_normal": min_normal, "nota_minima_para_evitar_prueba": min_no_prueba,
+        "avisos": avisos,
+        "nota": "Estimación con la mejor nota de cada asignatura y el Art. 24 del Reglamento; el estado oficial lo define la universidad al cierre del periodo.",
+    }
+
+
+@mcp.tool
+def simular_notas(id_estudiante: str, notas: dict[str, float] | None = None, nota_uniforme: float | None = None) -> dict:
+    """Simulador "¿qué pasa si...?": recalcula el PGA, el estado académico (Art. 24) y la carga permitida del
+    próximo periodo según las notas que el estudiante espera sacar en los cursos que está viendo.
+    notas: {código o nombre de la asignatura: nota 0-5}. nota_uniforme: misma nota para todos los cursos sin nota.
+    Devuelve además la nota mínima promedio para quedar en estado Normal y para evitar la prueba académica."""
+    return _simular(_check_id(id_estudiante), notas, nota_uniforme)
 
 
 @mcp.tool
@@ -557,6 +697,62 @@ async def app_eventos_personales(request: Request):
     return JSONResponse({"ok": True, "mensaje": "Evento agregado."})
 
 
+def _limpiar_respuesta(t: str) -> str:
+    """Quita la marca de ruta que la app agrega al final (<sub>Ruta: ...</sub>)."""
+    return re.sub(r"\s*<sub>Ruta:[^<]*</sub>\s*$", "", t or "").strip()
+
+
+@mcp.custom_route("/app/calificar", methods=["POST"])
+async def app_calificar(request: Request):
+    """Guarda si una respuesta del asistente fue útil (1) o no (-1). Volver a calificar la misma respuesta la
+    actualiza; valor 0 borra la calificación."""
+    if not _authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if not _existe("calificacion"):
+        return JSONResponse({"ok": False, "mensaje": "La calificación de respuestas todavía no está activada en el servidor."})
+    b = await _json(request)
+    sid = (b.get("id_estudiante") or "").strip().upper()
+    if not ID_RX.match(sid):
+        return JSONResponse({"ok": False, "mensaje": "ID inválido."}, status_code=400)
+    try:
+        valor = int(b.get("valor"))
+    except (TypeError, ValueError):
+        valor = 99
+    if valor not in (-1, 0, 1):
+        return JSONResponse({"ok": False, "mensaje": "Valor inválido."}, status_code=400)
+    pregunta = str(b.get("pregunta") or "")[:4000]
+    respuesta = _limpiar_respuesta(str(b.get("respuesta") or ""))[:12000]
+    conv = str(b.get("session_id") or "")[:40] or None
+    huella = hashlib.md5((pregunta + "\n" + respuesta).encode()).hexdigest()
+    if valor == 0:
+        db.execute("DELETE FROM calificacion WHERE id_estudiante=%s AND huella=%s", (sid, huella))
+        return JSONResponse({"ok": True})
+    log = db.fetch_one("""SELECT id, intencion FROM chat_log WHERE id_estudiante=%s AND pregunta=%s
+                          AND (%s::text IS NULL OR session_id=%s) ORDER BY id DESC LIMIT 1""", (sid, pregunta, conv, conv)) or {}
+    db.execute("""INSERT INTO calificacion (id_estudiante, session_id, chat_log_id, intencion, pregunta, respuesta, huella, valor)
+                  VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                  ON CONFLICT (id_estudiante, huella) DO UPDATE SET valor=EXCLUDED.valor, creado=now()""",
+               (sid, conv, log.get("id"), log.get("intencion") or b.get("intencion"), pregunta, respuesta, huella, valor))
+    return JSONResponse({"ok": True})
+
+
+@mcp.custom_route("/app/simular", methods=["POST"])
+async def app_simular(request: Request):
+    """Simulador de notas de la pestaña Personal (misma lógica que la herramienta MCP simular_notas)."""
+    if not _authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    b = await _json(request)
+    sid = (b.get("id_estudiante") or "").strip().upper()
+    if not ID_RX.match(sid):
+        return JSONResponse({"ok": False, "mensaje": "ID inválido."}, status_code=400)
+    notas = b.get("notas") if isinstance(b.get("notas"), dict) else {}
+    try:
+        data = _simular(sid, notas)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"ok": False, "mensaje": str(e)}, status_code=500)
+    return JSONResponse(json.loads(json.dumps({"ok": True, "datos": data}, default=str)))
+
+
 def _app_historial_chat(sid: str):
     return db.fetch_all("""SELECT pregunta, respuesta, intencion,
                                   to_char((creado AT TIME ZONE 'UTC') AT TIME ZONE 'America/Bogota','YYYY-MM-DD HH24:MI') AS fecha
@@ -564,14 +760,21 @@ def _app_historial_chat(sid: str):
                            ORDER BY id DESC LIMIT 60""", (sid,))
 
 
-def _app_conversaciones(sid: str):
-    """Conversaciones del estudiante (una por session_id), la más reciente primero."""
-    return db.fetch_all("""
+def _app_conversaciones(sid: str, q: str = ""):
+    """Conversaciones del estudiante (una por session_id), la más reciente primero. Con `q` solo devuelve
+    las que contienen esas palabras en alguna pregunta o respuesta (sin importar tildes ni mayúsculas)."""
+    filtro, params = "", [sid]
+    palabras = [w for w in re.findall(r"\w+", q or "") if len(w) > 1][:6]
+    for w in palabras:
+        filtro += """ AND session_id IN (SELECT session_id FROM chat_log WHERE id_estudiante=%s
+                      AND unaccent_lower(coalesce(pregunta,'') || ' ' || coalesce(respuesta,'')) LIKE unaccent_lower(%s))"""
+        params += [sid, f"%{w}%"]
+    return db.fetch_all(f"""
         SELECT session_id AS id, COUNT(*) AS mensajes,
                (array_agg(pregunta ORDER BY id))[1] AS primera,
                to_char((MAX(creado) AT TIME ZONE 'UTC') AT TIME ZONE 'America/Bogota','YYYY-MM-DD HH24:MI') AS ultima
-        FROM chat_log WHERE id_estudiante=%s AND respuesta IS NOT NULL
-        GROUP BY session_id ORDER BY MAX(creado) DESC LIMIT 50""", (sid,))
+        FROM chat_log WHERE id_estudiante=%s AND respuesta IS NOT NULL {filtro}
+        GROUP BY session_id ORDER BY MAX(creado) DESC LIMIT 50""", params)
 
 
 def _app_conversacion(sid: str, conv: str):
@@ -579,6 +782,54 @@ def _app_conversacion(sid: str, conv: str):
                                   to_char((creado AT TIME ZONE 'UTC') AT TIME ZONE 'America/Bogota','YYYY-MM-DD HH24:MI') AS fecha
                            FROM chat_log WHERE id_estudiante=%s AND session_id=%s AND respuesta IS NOT NULL
                            ORDER BY id LIMIT 200""", (sid, conv))
+
+
+def _app_alertas(sid: str):
+    """Avisos para el estudiante: fechas del calendario y eventos propios cercanos, riesgos académicos y
+    requisitos de grado pendientes. Ordenados de más a menos urgente."""
+    av = []
+    res = db.fetch_one("SELECT * FROM v_proyeccion_grado WHERE id_estudiante=%s", (sid,)) or {}
+    estado, pga, sem = res.get("estado_academico"), res.get("pga"), res.get("semestre_actual") or 1
+    if estado == "PRUEBA_ACADEMICA":
+        av.append(("alta", "Estás en prueba académica", "Solicita el ingreso al Programa de Recuperación Académica (Art. 86) y matricula solo los cursos que te autoricen."))
+    elif estado == "CONDICIONAL":
+        av.append(("alta", "Estás en estado condicional", "Puedes matricular máximo 3 cursos y debes inscribirte en acompañamiento de Bienestar (Art. 84). Usa el simulador de la pestaña Personal para ver qué notas necesitas."))
+    elif pga is not None and float(pga) <= 3.35:
+        av.append(("media", f"Tu PGA ({pga}) está cerca del límite", "Por debajo de 3.20 pasarías a estado condicional (Art. 24). Revisa el simulador de notas en la pestaña Personal."))
+    fallas = db.fetch_all("""SELECT a.nombre, h.fallas_pct FROM historial_academico h JOIN asignatura a USING (cod_asignatura)
+                             WHERE h.id_estudiante=%s AND h.estado='EN_CURSO' AND h.fallas_pct >= 10
+                             ORDER BY h.fallas_pct DESC""", (sid,))
+    for f in [f for f in fallas if float(f["fallas_pct"]) >= 15]:
+        av.append(("alta", f"Fallas en {f['nombre']}: {f['fallas_pct']} %", "Con 20 % o más de inasistencia el curso se pierde (Art. 46)."))
+    leves = [f for f in fallas if float(f["fallas_pct"]) < 15]
+    if leves:
+        av.append(("info", "Inasistencia por encima del 10 %", ", ".join(f"{f['nombre']} ({f['fallas_pct']} %)" for f in leves)
+                   + ". Con 20 % o más el curso se pierde (Art. 46)."))
+    for e in db.fetch_all("""SELECT actividad, to_char(fecha_inicio,'YYYY-MM-DD') AS inicio, (fecha_inicio - CURRENT_DATE) AS dias,
+                                    to_char(fecha_fin,'YYYY-MM-DD') AS fin, (fecha_fin - CURRENT_DATE) AS dias_fin
+                             FROM calendario_academico
+                             WHERE fecha_inicio BETWEEN CURRENT_DATE AND CURRENT_DATE + 14
+                                OR (fecha_inicio < CURRENT_DATE AND fecha_fin BETWEEN CURRENT_DATE AND CURRENT_DATE + 7)
+                             ORDER BY fecha_inicio LIMIT 3"""):
+        if e["dias"] >= 0:
+            cuando = "hoy" if e["dias"] == 0 else f"en {e['dias']} día{'s' if e['dias'] != 1 else ''}"
+            av.append(("media" if e["dias"] <= 3 else "info", e["actividad"], f"Empieza {cuando} ({e['inicio']})."))
+        else:
+            cuando = "hoy" if e["dias_fin"] == 0 else f"en {e['dias_fin']} día{'s' if e['dias_fin'] != 1 else ''}"
+            av.append(("media", e["actividad"], f"Termina {cuando} ({e['fin']})."))
+    if _existe("evento_personal"):
+        for e in db.fetch_all("""SELECT nombre, to_char(fecha,'YYYY-MM-DD') AS fecha, (fecha - CURRENT_DATE) AS dias
+                                 FROM evento_personal WHERE id_estudiante=%s AND fecha BETWEEN CURRENT_DATE AND CURRENT_DATE + 3
+                                 ORDER BY fecha""", (sid,)):
+            cuando = "hoy" if e["dias"] == 0 else ("mañana" if e["dias"] == 1 else f"en {e['dias']} días")
+            av.append(("personal", e["nombre"], f"Tu evento es {cuando} ({e['fecha']})."))
+    if not res.get("ingles_cumplido") and sem >= 5:
+        av.append(("info", f"Inglés: estás en {res.get('nivel_ingles')}", "Necesitas B2 para graduarte (Art. 67). Planea tus cursos o la certificación desde ya."))
+    if res.get("ccd_rutas_pendientes") and sem >= 3:
+        av.append(("info", f"Competencias digitales: {res['ccd_rutas_pendientes']} ruta(s) pendiente(s)",
+                   "Se recomienda terminarlas en los primeros semestres; hay cursos vacacionales e intensivos."))
+    orden = {"alta": 0, "personal": 1, "media": 2, "info": 3}
+    return [{"nivel": n, "titulo": t, "detalle": d} for n, t, d in sorted(av, key=lambda a: orden[a[0]])]
 
 
 def _app_personal(sid: str):
@@ -607,7 +858,25 @@ def _app_personal(sid: str):
         sem = a.get("semestre_sugerido") or 0
         clave = sem if sem >= (est.get("semestre_actual") or 1) else 0  # 0 = atrasadas
         por_sem.setdefault(clave, []).append(a)
-    return {"cursos": cursos, "certificados": certificados, "nivel_ingles": est.get("nivel_ingles"),
+    proy = db.fetch_one("SELECT * FROM v_proyeccion_grado WHERE id_estudiante=%s", (sid,)) or {}
+    res = db.fetch_one("SELECT * FROM v_resumen_estudiante WHERE id_estudiante=%s", (sid,)) or {}
+    areas = db.fetch_all("""SELECT a.area, SUM(a.creditos) AS total,
+                                   COALESCE(SUM(a.creditos) FILTER (WHERE m.estado IN ('APROBADA','HOMOLOGADA')), 0) AS aprobados
+                            FROM asignatura a JOIN estudiante e ON e.cod_programa=a.cod_programa AND e.id_estudiante=%s
+                            LEFT JOIN v_mejor_nota m ON m.id_estudiante=e.id_estudiante AND m.cod_asignatura=a.cod_asignatura
+                            WHERE a.creditos > 0 GROUP BY a.area ORDER BY SUM(a.creditos) DESC""", (sid,))
+    progreso = {"porcentaje_avance": res.get("porcentaje_avance"), "creditos_aprobados": res.get("creditos_aprobados"),
+                "creditos_totales": res.get("creditos_totales"), "creditos_en_curso": res.get("creditos_en_curso"),
+                "pga": res.get("pga"), "estado_academico": res.get("estado_academico"),
+                "semestres_restantes": proy.get("semestres_restantes_estimados"), "areas": areas}
+    try:
+        propuesta = proyeccion_y_recomendaciones(sid)["propuesta_proximo_periodo"]
+    except Exception:  # noqa: BLE001
+        propuesta = None
+    return {"progreso": progreso, "propuesta": propuesta,
+            "simulador": [{"codigo": c["codigo"], "asignatura": c["asignatura"], "creditos": c["creditos"]}
+                          for c in _base_simulacion(sid)["en_curso"]],
+            "cursos": cursos, "certificados": certificados, "nivel_ingles": est.get("nivel_ingles"),
             "semestre_actual": est.get("semestre_actual"),
             "en_curso": en_curso,
             "pendientes_por_semestre": [{"semestre": k, "asignaturas": v} for k, v in sorted(por_sem.items())],
@@ -626,13 +895,15 @@ async def app_datos(request: Request):
             data = _app_noticias(str(b.get("tema") or ""))
         elif seccion == "eventos":
             data = _app_eventos(sid)
-        elif seccion in ("historial", "personal", "conversaciones", "conversacion"):
+        elif seccion in ("historial", "personal", "conversaciones", "conversacion", "alertas"):
             if not ID_RX.match(sid):
                 return JSONResponse({"error": "id inválido"}, status_code=400)
             if seccion == "historial":
                 data = _app_historial_chat(sid)
             elif seccion == "conversaciones":
-                data = _app_conversaciones(sid)
+                data = _app_conversaciones(sid, str(b.get("q") or ""))
+            elif seccion == "alertas":
+                data = _app_alertas(sid)
             elif seccion == "conversacion":
                 data = _app_conversacion(sid, str(b.get("conversacion") or ""))
             else:
@@ -696,8 +967,15 @@ async def evidencias(_: Request):
     chunks = db.fetch_all("""SELECT fuente, COUNT(*) AS fragmentos, ROUND(AVG(length(contenido))) AS caracteres_promedio,
                                     MAX(length(contenido)) AS caracteres_max
                              FROM documento_chunk GROUP BY fuente ORDER BY 2 DESC""")
+    satisfaccion = None
+    if _existe("calificacion"):
+        satisfaccion = {"por_ruta": db.fetch_all("SELECT * FROM v_satisfaccion"),
+                        "total": db.fetch_one("""SELECT COUNT(*) AS calificaciones, COUNT(*) FILTER (WHERE valor=1) AS utiles,
+                                                        ROUND(100.0*COUNT(*) FILTER (WHERE valor=1)/NULLIF(COUNT(*),0),1) AS porcentaje_util
+                                                 FROM calificacion""")}
     data = json.loads(json.dumps({
         "generado": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+        "satisfaccion": satisfaccion,
         "tablas": tablas, "vistas": vistas_bd, "herramientas_mcp": herramientas,
         "ejemplo_herramienta": {"llamada": f"estado_academico('{DEMO_ID}')", "respuesta": estado_academico(DEMO_ID)},
         "rag": {"modelo": "paraphrase-multilingual-MiniLM-L12-v2 (384 dimensiones)", "chunk_max": 600, "overlap": 120,
